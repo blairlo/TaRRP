@@ -9,9 +9,70 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-# Upload Data
+### prelims
 ```{r}
+library("sen2r")
+library("sf")
+library("geojsonlint")
+
+```
+
+
+# Training
+Download January 10th 2019 Copurnicus Sentinel scene to match ground truth imagery (Flown January 2019n)
+
+### Upload Correct and Mask
+Atmostpherically Correct Sentinal Data
+```{r}
+RasterList<- list.files(path=paste("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryAnalysis/SentinalData/1C")) 
+
+test<-sen2cor(RasterList,
+              l1c_dir = "C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryAnalysis/SentinalData/1C",
+              outdir = "C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryAnalysis/SentinalData/2A",
+              use_dem = TRUE)
+
+```
+
+
+```{r}
+
+```
+
+
+
+# Appendix
+# Download Sentinel Data Programatically 
+```{r}
+#gui Version
+sen2r()
+
+# full command
+#Extent
+myextent_1 <- st_read("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@Response/Data/Bay_County.shp") 
+
+out_dir_1  <- "C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@Response/Data/SentinalData/Images" # output folder
+
+safe_dir <- "C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@Response/Data/SentinalData/SAFE Files"  # folder to store downloaded SAFE
+
+Query1<-sen2r(
+  gui = FALSE,
+  step_atmcorr = "l2a",
+  extent = myextent_1,
+  extent_name = "BayCounty",
+  timewindow = c(as.Date("2018-10-01"), as.Date("2018-12-12")),
+  #s2tiles_selected = c("16RFU"),
+  list_prods = "BOA",
+  list_rgb = c("RGB432B"),
+  index_source = "BOA",
+  mask_type = "cloud_medium_proba",
+  max_mask = 20,
+  #clip_on_extent = TRUE,
+  #extent_as_mask = TRUE,
+  path_l1c = safe_dir,
+  path_l2a = safe_dir,
+  path_out = out_dir_1
+)
+
 
 ```
 
