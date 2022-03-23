@@ -85,8 +85,8 @@ FootprintsRoof<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/
 
 ### Extract Raster values by footprint
 ```{r}
-FootprintsTarpRGBN<-ExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Monthly/01_2018",FootprintsTarp)
-FootprintsRoofRGBN<-ExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Monthly/01_2018",FootprintsRoof)
+FootprintsTarpRGBN<-ExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Monthly/01_2019",FootprintsTarp)
+FootprintsRoofRGBN<-ExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Monthly/01_2019",FootprintsRoof)
 ```
 
 ### Compile Training set 
@@ -132,7 +132,7 @@ hitmiss(GLM_RB1)
 # Random Forest Estimator
 ```{r}
 rf <- randomForest(Tarp ~ .,data=train)
-rf #Show results within test set
+rf#Show results within training set
 ```
 # Random Forest Out of sample error
 ```{r}
@@ -141,7 +141,10 @@ cm = table(test[,5], pred)
 cm #Show results out of sample
 ```
 
-
+# Save Random Forest
+```{r}
+saveRDS(rf, "BayPlanetRF.rds")
+```
 
 
 

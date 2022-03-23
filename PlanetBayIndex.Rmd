@@ -1,0 +1,49 @@
+---
+title: "PlanetBayIndex"
+author: "Logan"
+date: "3/22/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tmap) 
+library(mapview)
+library(sf)
+library(raster)
+library(stringr)
+library(questionr)
+library(dplyr)
+library(rgdal)
+library(rgeos)
+library(ggplot2)
+library(MASS)
+library(pscl)
+library(visreg)
+library(mlogit)
+library(rstanarm)
+library(loo)
+library(bayesplot)
+library(shinystan)
+library(readxl)
+library(reshape2)
+library(data.table)
+library(randomForest)
+require(caTools)
+```
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
