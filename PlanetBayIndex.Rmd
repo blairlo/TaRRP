@@ -36,13 +36,22 @@ library(randomForest)
 require(caTools)
 ```
 
-
-
+# Load Classification Model
 ```{r}
-
+rf<-readRDS("BayPlanetRF.rds")
 ```
 
+# Read in footprints and parcel info
+```{r}
+Footprints<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/Building Data/BuildingFootprints.shp"))
+Parcels<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/Building Data/Parcels.shp"))
+```
 
+```{r}
+Property<-st_join(Footprints,Parcels, left = TRUE, largest = TRUE) #join the parcel that shares the most areas with footprint
+
+
+```
 
 
 

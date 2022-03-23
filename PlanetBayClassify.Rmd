@@ -33,8 +33,6 @@ library(reshape2)
 library(data.table)
 library(randomForest)
 require(caTools)
-
-memory.limit(size=100000) #forget everything else you have running
 ```
 
 
