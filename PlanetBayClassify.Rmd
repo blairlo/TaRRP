@@ -62,20 +62,29 @@ return(ex)
 }
 ```
 
-# Load Data
+### Load Data
 ```{r}
 FootprintsTarp<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/TrainingData/TarpMaster.shp"))
 FootprintsRoof<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/TrainingData/RoofMaster.shp"))
 
 ```
 
-# Extract Raster values by footprint
+### Extract Raster values by footprint
 ```{r}
 FootprintsTarpRGBN<-ExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Monthly/01_2018",FootprintsTarp)
 FootprintsRoofRGBN<-ExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Monthly/01_2018",FootprintsRoof)
 ```
 
+### Compile Training set 
+```{r}
+#Label Outcomes
+FootprintsTarpRGBN$Tarp<-1 
+FootprintsRoofRGBN$Tarp<-0
 
+
+
+
+```
 
 
 
