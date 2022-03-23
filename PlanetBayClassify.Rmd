@@ -19,6 +19,20 @@ library(questionr)
 library(dplyr)
 library(rgdal)
 library(rgeos)
+library(ggplot2)
+library(MASS)
+library(pscl)
+library(visreg)
+library(mlogit)
+library(rstanarm)
+library(loo)
+library(bayesplot)
+library(shinystan)
+library(readxl)
+library(reshape2)
+library(data.table)
+library(randomForest)
+require(caTools)
 
 memory.limit(size=100000) #forget everything else you have running
 ```
@@ -77,14 +91,68 @@ FootprintsRoofRGBN<-ExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertat
 
 ### Compile Training set 
 ```{r}
+#Subset
+FootprintsTarpRGBN<-select(FootprintsTarpRGBN,
+                           GlobalID,
+                           layer.1,
+                           layer.2,
+                           layer.3)
+
+FootprintsRoofRGBN<-select(FootprintsRoofRGBN,
+                           GlobalID,
+                           layer.1,
+                           layer.2,
+                           layer.3)
+
 #Label Outcomes
-FootprintsTarpRGBN$Tarp<-1 
-FootprintsRoofRGBN$Tarp<-0
+FootprintsTarpRGBN$Tarp<-as.factor(1) 
+FootprintsRoofRGBN$Tarp<-as.factor(0)
 
 
+#stack
+TrainingDat<-rbind(FootprintsTarpRGBN,FootprintsRoofRGBN)
+TrainingDat<-st_drop_geometry(TrainingDat) #Drop geometry
 
+
+#Split
+sample = sample.split(TrainingDat$Tarp, SplitRatio = .75)
+train = subset(TrainingDat, sample == TRUE)
+test  = subset(TrainingDat, sample == FALSE)
 
 ```
+
+# Models
+```{r}
+GLM_RB1<-glm(Tarp~layer.1+layer.3,family = binomial(link="logit"),data =TrainingDat)
+
+hitmiss(GLM_RB1)
+
+```
+
+# Random Forest Estimator
+```{r}
+rf <- randomForest(Tarp ~ .,data=train)
+rf #Show results within test set
+```
+# Random Forest Out of sample error
+```{r}
+pred = predict(rf, newdata=test[-5])
+cm = table(test[,5], pred)
+cm #Show results out of sample
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
