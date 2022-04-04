@@ -35,16 +35,35 @@ library(randomForest)
 require(caTools)
 ```
 
-
 # Functions
 ```{r}
+
+MosaicRasters<-function(RasterLocation, CellFunction){ 
+ 
+  # make list of file names that are rasters. Note to change the pattern argument if rasters are not .tif. Alternatively you can remove the pattern argument if the file location only stores relevant raster files to be mosaiced. 
+  current.list <- list.files(path=paste(RasterLocation), full.names=TRUE, pattern = ".tif") 
+    
+  # read in raster files as a raster stack
+  raster.list<- lapply(current.list, raster::stack) 
+  
+  # clear user defined names if present
+  names(raster.list) <- NULL 
+  
+  # this tells the mosaic function to average any overlapping pixels
+  raster.list$fun <- CellFunction
+  
+  # mosaic list using the mosaic function the raster package
+  Mosaic <- do.call( raster::mosaic, raster.list)
+
+}
+
 ExtractRaster<-function(RasterLocation,UOA){ 
  
   # make list of file names that are rasters. Note to change the pattern argument if rasters are not .tif. Alternatively you can remove the pattern argument if the file location only stores relevant raster files to be mosaiced. 
   current.list <- list.files(path=paste(RasterLocation), full.names=TRUE, pattern = ".tif") 
     
   # read in raster files as a raster stack
-  raster.list<- lapply(current.list, stack) 
+  raster.list<- lapply(current.list, raster::stack) 
   
   # clear user defined names if present
   names(raster.list) <- NULL 
@@ -53,7 +72,7 @@ ExtractRaster<-function(RasterLocation,UOA){
   raster.list$fun <- mean 
   
   # mosaic list using the mosaic function the raster package
-  Mosaic <- do.call(mosaic, raster.list)
+  Mosaic <- do.call( raster::mosaic, raster.list)
   
   # ensure joining units have a coordinate system
   UOA<-st_transform(UOA, crs = 3857)
@@ -147,21 +166,6 @@ saveRDS(rf, "BayPlanetRF.rds")
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ```{r}
 tmap_mode("view") #interactive
 #tmap_mode("plot") #static
@@ -170,6 +174,10 @@ tm_shape(TrainTarp) +
     tm_polygons("layer.1")
 
 ```
+
+
+
+
 
 
 

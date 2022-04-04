@@ -1,0 +1,59 @@
+---
+title: "Scratch"
+author: "Logan"
+date: "3/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+MosaicRasters<-function(RasterLocation){ 
+ 
+  # make list of file names that are rasters. Note to change the pattern argument if rasters are not .tif. Alternatively you can remove the pattern argument if the file location only stores relevant raster files to be mosaiced. 
+  current.list <- list.files(path=paste(RasterLocation), full.names=TRUE, pattern = ".tif") 
+    
+  # read in raster files as a raster stack
+  raster.list<- lapply(current.list, raster::stack) 
+  
+ raster.list<-lapply(raster.list, reclassify, cbind(0, NA))
+  
+ 
+  
+  # clear user defined names if present
+  names(raster.list) <- NULL 
+  
+  # mosaic list using the mosaic function the raster package
+  Mosaic <- do.call(raster::merge, c(raster.list, overlap=TRUE))
+
+}
+
+
+ current.list <- list.files(path=paste("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Daily/10_18-10_21/test"), full.names=TRUE, pattern = ".tif")
+ 
+raster.list<- lapply(current.list, raster::stack) 
+
+
+```
+
+
+
+```{r}
+MosaicRasters
+
+TestMosaic3<-MosaicRasters("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Daily/10_18-10_21/test")
+
+writeRaster(TestMosaic3, filename="C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/TestMosaic3.tiff", format="GTiff")
+
+library(mapview)
+
+viewRGB(TestMosaic)
+
+TestMosaic3NA <- reclassify(TestMosaic3, cbind(0, NA))
+
+```
+
