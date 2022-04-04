@@ -115,15 +115,16 @@ return(ex)
 
 ### Load Data
 ```{r}
-FootprintsTarp<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/TrainingData/TarpMaster.shp"))
-FootprintsRoof<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/TrainingData/RoofMaster.shp"))
+FootprintsTarp<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/TrainingData/TarpMaster.shp"))
+FootprintsRoof<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/TrainingData/RoofMaster.shp"))
 
 ```
 
 ### Extract Raster values by footprint
 ```{r}
-FootprintsTarpRGBN<-ExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Monthly/01_2019",FootprintsTarp)
-FootprintsRoofRGBN<-ExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryIndex/PlanetData/Monthly/01_2019",FootprintsRoof)
+FootprintsTarpRGB<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/01_2019",FootprintsTarp)
+
+FootprintsRoofRGB<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/01_2019",FootprintsRoof)
 ```
 
 ### Compile Training set 
