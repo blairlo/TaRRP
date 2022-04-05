@@ -130,32 +130,32 @@ FootprintsRoofRGB<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Diss
 ### Compile Training set 
 ```{r}
 #Subset
-FootprintsTarpRGBN<-select(FootprintsTarpRGBN,
+FootprintsTarpRGB<-select(FootprintsTarpRGB,
                            GlobalID,
                            layer.1,
                            layer.2,
                            layer.3)
 
-FootprintsRoofRGBN<-select(FootprintsRoofRGBN,
+FootprintsRoofRGB<-select(FootprintsRoofRGB,
                            GlobalID,
                            layer.1,
                            layer.2,
                            layer.3)
 
 #Label Outcomes
-FootprintsTarpRGBN$Tarp<-as.factor(1) 
-FootprintsRoofRGBN$Tarp<-as.factor(0)
+FootprintsTarpRGB$Tarp<-as.factor(1) 
+FootprintsRoofRGB$Tarp<-as.factor(0)
 
 
 #stack
-TrainingDat<-rbind(FootprintsTarpRGBN,FootprintsRoofRGBN)
+TrainingDat<-rbind(FootprintsTarpRGB,FootprintsRoofRGB)
 TrainingDat<-st_drop_geometry(TrainingDat) #Drop geometry
 
 
 #Split
-sample = sample.split(TrainingDat$Tarp, SplitRatio = .75)
-train = subset(TrainingDat, sample == TRUE)
-test  = subset(TrainingDat, sample == FALSE)
+sample <- sample.split(TrainingDat$Tarp, SplitRatio = .75)
+train <- subset(TrainingDat, sample == TRUE)
+test  <- subset(TrainingDat, sample == FALSE)
 
 ```
 
@@ -183,8 +183,6 @@ cm #Show results out of sample
 ```{r}
 saveRDS(rf, "BayPlanetRF.rds")
 ```
-
-
 
 
 ```{r}
