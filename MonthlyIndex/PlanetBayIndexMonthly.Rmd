@@ -54,10 +54,55 @@ PropertySF<-subset(Property, DORAPPDESC=="SINGLE FAMILY")
 # Extract Raster Values by footprint - month
 ```{r}
 # Make list of directories containing rasters by month
-current.dirs <- list.dirs("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly",recursive = FALSE, full.names = TRUE)
+#current.dirs <- list.dirs("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly",recursive = FALSE, full.names = TRUE)
   
 # Extract average raster value by footprint-month
-PropertyRGB.list<- lapply(current.dirs,MosaicExtractRaster,PropertySF)
+#PropertyRGB.list<- lapply(current.dirs,MosaicExtractRaster,PropertySF) #cant get this loop to work...
+
+MosaicExtractRaster<-function(RasterLocation,UOA){ 
+  
+  # make list of file names that are rasters. Note to change the pattern argument if rasters are not .tif. Alternatively you can remove the pattern argument if the file location only stores relevant raster files to be mosaiced. 
+  current.list <- list.files(path=paste(RasterLocation), full.names=TRUE, pattern = ".tif") 
+  
+  # read in raster files as a raster stack
+  raster.list<- lapply(current.list, raster::stack) 
+  
+  # clear user defined names if present
+  names(raster.list) <- NULL 
+  
+  # this tells the mosaic function to average any overlapping pixels
+  raster.list$fun <- mean 
+  
+  # mosaic list using the mosaic function the raster package
+  Mosaic <- do.call( raster::mosaic, raster.list)
+  
+  # ensure joining units have a coordinate system
+  UOA<-st_transform(UOA, crs = 3857)
+  
+  # match coordinate system of the mosaiced raster
+  Mosaic<-projectRaster(Mosaic, crs = crs(UOA))
+  
+  # extract (join) raster values to points or polygons. 
+  ex <- extract(Mosaic, 
+                UOA, 
+                fun=mean, #take the mean raster values (change to sum or other function if desired)
+                na.rm=TRUE,
+                df=TRUE)
+  
+  ex<-cbind(UOA,ex)
+  
+  return(ex)
+}
+
+
+RGB_10_2018<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/10_2018",PropertySF)
+
+RGB_11_2018<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/10_2018",PropertySF)
+
+
+
+
+
 
 
 ```

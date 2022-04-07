@@ -26,7 +26,7 @@ ExtractRaster<-function(Mosaic,UOA,CellFunction){
   # extract (join) raster values to points or polygons. 
   ex <- extract(Mosaic, 
                 UOA, 
-                fun=CellFunction, #If polygons, e.g. take the mean, max etc. raster values
+                fun=CellFunction, # e.g. take the mean, max etc. raster values
                 na.rm=TRUE,
                 df=TRUE)
   
@@ -63,7 +63,7 @@ MosaicExtractRaster<-function(RasterLocation,UOA){
   # extract (join) raster values to points or polygons. 
   ex <- extract(Mosaic, 
                 UOA, 
-                fun=mean, #If polygons, take the mean raster values (change to sum or other function if desired)
+                fun=mean, #take the mean raster values (change to sum or other function if desired)
                 na.rm=TRUE,
                 df=TRUE)
   
