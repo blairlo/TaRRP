@@ -44,34 +44,6 @@ FootprintsRoof<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/
 
 ```
 
-### Imagary
-
-Upload and mosaic associated training year
-```{r}
-#RGB<-MosaicRasters("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/01_2019",mean)
-#RGB <- writeRaster(RGB, filename="C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/01_2019Mosaic.tif")
-
-#if ran already, pull in from file
-RGB<-raster::stack("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/01_2019Mosaic.tif")
-#if ran already, pull in from file
-
-#plot(RGB)
-
-```
-
-Extract raster RGB values by footprint, summa
-```{r}
-FootprintsTarpRGB<- ExtractRaster(RGB,# Rasater Brick contain RGB bands
-                    FootprintsTarp,  #Training footprints
-                    mean) # assign the mean pixel value to training footprints
-
-FootprintsRoofRGB<- ExtractRaster(RGB,
-                    FootprintsRoof,
-                    mean)
-
-```
-
-
 ### Extract Raster values by footprint
 ```{r}
 FootprintsTarpRGB<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/01_2019",FootprintsTarp)
