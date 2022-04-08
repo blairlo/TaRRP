@@ -40,15 +40,19 @@ library(stargazer)
 
 # Read in footprints and parcel info
 ```{r}
-Footprints<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/Building Data/BuildingFootprints.shp"))
-Parcels<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/Building Data/Parcels.shp"))
+Footprints<-st_transform(st_zm(read_sf(
+  "C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/Building Data/BuildingFootprints.shp")), 
+  crs = 6440) # set CRS to Nad 83 , north Florida projection (m)
+
+Parcels<-st_transform(st_zm(read_sf(
+  "C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/Building Data/Parcels.shp")), 
+  crs = 6440)
 ```
 
 # Make Single Family Set
 ```{r}
 Property<-st_join(Footprints,Parcels, left = TRUE, largest = TRUE) #join the parcel that shares the most areas with footprint
 PropertySF<-subset(Property, DORAPPDESC=="SINGLE FAMILY")
-
 ```
 
 # Extract Raster Values by Footprint
@@ -70,9 +74,6 @@ MosaicExtractRaster<-function(RasterLocation,UOA){
   # mosaic list using the mosaic function the raster package
   Mosaic <- do.call( raster::mosaic, raster.list)
   
-  # ensure joining units have a coordinate system
-  UOA<-st_transform(UOA, crs = 6440) # set crs to NAD 83 North Florida projection
-  
   # match coordinate system of the mosaiced raster
   Mosaic<-projectRaster(Mosaic, crs = crs(UOA))
   
@@ -90,12 +91,21 @@ MosaicExtractRaster<-function(RasterLocation,UOA){
 
 
 #Make list of directories containing rasters by month
-current.dirs <- list.dirs("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly",recursive = FALSE, full.names = TRUE)
+#current.dirs <- list.dirs("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly",recursive = FALSE, full.names = TRUE)
   
 #Extract average raster value by footprint-month
-PropertyRGB.list<- lapply(current.dirs, MosaicExtractRaster, UOA = PropertySF) #cant get this loop to work...
+#PropertyRGB.list<- lapply(current.dirs, MosaicExtractRaster, UOA = PropertySF) #cant get this loop to work...
 
-RGBExt_10_2018<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/10_2018",PropertySF)
+RGBExt_10_2018<-st_write(select(MosaicExtractRaster(
+"C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/10_2018",
+                          PropertySF),
+                          GlobalID=GlobalID.y,
+                           layer.1,
+                           layer.2,
+                           layer.3),
+"C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/RGBExt_10_2018")
+                         
+                         
 RGBExt_11_2018<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/11_2018",PropertySF)
 RGBExt_12_2018<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/12_2018",PropertySF)
 RGBExt_01_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/01_2019",PropertySF)
