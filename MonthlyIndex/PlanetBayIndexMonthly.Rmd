@@ -97,13 +97,13 @@ MosaicExtractRaster<-function(RasterLocation,UOA){
 #PropertyRGB.list<- lapply(current.dirs, MosaicExtractRaster, UOA = PropertySF) #cant get this loop to work...
 
 RGBExt_10_2018<-st_write(select(MosaicExtractRaster(
-"C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/10_2018",
+paste(getwd(),'/PlanetData/Monthly/10_2018',sep=""),
                           PropertySF),
                           GlobalID=GlobalID.y,
                            layer.1,
                            layer.2,
                            layer.3),
-"C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/RGBExt_10_2018")
+paste(getwd(),'/PlanetData/Monthly/10_2018',sep=""))
                          
                          
 RGBExt_11_2018<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/11_2018",PropertySF)
