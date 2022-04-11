@@ -41,11 +41,11 @@ library(stargazer)
 # Read in footprints and parcel info
 ```{r}
 Footprints<-st_transform(st_zm(read_sf(
-  "C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/Building Data/BuildingFootprints.shp")), 
+  "./Building Data/BuildingFootprints.shp")), 
   crs = 6440) # set CRS to Nad 83 , north Florida projection (m)
 
 Parcels<-st_transform(st_zm(read_sf(
-  "C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/Building Data/Parcels.shp")), 
+  "./Building Data/Parcels.shp")), 
   crs = 6440)
 ```
 
@@ -56,10 +56,11 @@ PropertySF<-subset(Property, DORAPPDESC=="SINGLE FAMILY")
 ```
 
 # Extract Raster Values by Footprint
+
+I firt define a function to 
 ```{r}
-MosaicExtractRaster<-function(RasterLocation,UOA){ 
+MosaicExtractRaster<-function(RasterLocation,UOA){ # 2 inputs - folder where rasters are stored and the unit of extraction (e.g. polygons, points)
   
-  # make list of file names that are rasters. Note to change the pattern argument if rasters are not .tif. Alternatively you can remove the pattern argument if the file location only stores relevant raster files to be mosaiced. 
   current.list <- list.files(path=paste(RasterLocation), full.names=TRUE, pattern = ".tif") 
   
   # read in raster files as a raster stack
@@ -89,70 +90,121 @@ MosaicExtractRaster<-function(RasterLocation,UOA){
   return(ex)
 }
 
-
 #Make list of directories containing rasters by month
 #current.dirs <- list.dirs("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly",recursive = FALSE, full.names = TRUE)
   
 #Extract average raster value by footprint-month
-#PropertyRGB.list<- lapply(current.dirs, MosaicExtractRaster, UOA = PropertySF) #cant get this loop to work...
+#PropertyRGB.list<- lapply(current.dirs, MosaicExtractRaster, UOA = PropertySF) #cant get this loop to work without crashing...
 
+
+# Run function for each year of imagery. Save as object and export
 RGBExt_10_2018<-st_write(select(MosaicExtractRaster(
-paste(getwd(),'/PlanetData/Monthly/10_2018',sep=""),
-                          PropertySF),
-                          GlobalID=GlobalID.y,
-                           layer.1,
-                           layer.2,
-                           layer.3),
-paste(getwd(),'/PlanetData/Monthly/10_2018',sep=""))
-                         
-                         
-RGBExt_11_2018<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/11_2018",PropertySF)
-RGBExt_12_2018<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/12_2018",PropertySF)
-RGBExt_01_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/01_2019",PropertySF)
-RGBExt_02_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/02_2019",PropertySF)
-RGBExt_03_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/03_2019",PropertySF)
-RGBExt_04_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/04_2019",PropertySF)
-RGBExt_05_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/05_2019",PropertySF)
-RGBExt_06_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/06_2019",PropertySF)
-RGBExt_07_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/07_2019",PropertySF)
-RGBExt_08_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/08_2019",PropertySF)
-RGBExt_09_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/09_2019",PropertySF)
-RGBExt_10_2019<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/10_2019",PropertySF)
+                          "./PlanetData/Monthly/10_2018",PropertySF), # extract single family properties
+                              GlobalID=GlobalID.y,
+                              layer.1, #clean data to just the three extracted bands
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/10_2018/RGBExt_10_2018.shp") #export to avoid reanalysis
 
+RGBExt_11_2018<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/11_2018",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/11_2018/RGBExt_11_2018.shp")
+                         
+RGBExt_12_2018<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/12_2018",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/12_2018/RGBExt_12_2018.shp")
 
+RGBExt_01_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/01_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/01_2019/RGBExt_01_2019.shp")
+
+RGBExt_02_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/02_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/02_2019/RGBExt_02_2019.shp")
+
+RGBExt_03_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/03_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/03_2019/RGBExt_03_2019.shp")
+
+RGBExt_04_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/04_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/04_2019/RGBExt_04_2019.shp")
+
+RGBExt_05_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/05_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/05_2019/RGBExt_05_2019.shp")
+
+RGBExt_06_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/06_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/06_2019/RGBExt_06_2019.shp")
+
+RGBExt_07_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/07_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/07_2019/RGBExt_07_2019.shp")
+
+RGBExt_08_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/08_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/08_2019/RGBExt_08_2019.shp")
+
+RGBExt_09_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/09_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/09_2019/RGBExt_09_2019.shp")
+
+RGBExt_10_2019<-st_write(select(MosaicExtractRaster(
+                          "./PlanetData/Monthly/10_2019",PropertySF),
+                              GlobalID=GlobalID.y,
+                              layer.1,
+                              layer.2,
+                              layer.3),
+                                 "./PlanetData/Monthly/10_2019/RGBExt_10_2019.shp")
 
 ```
 
 # Reduce to Prediction Set
-```{r}
-RGBExt_10_2018.ToModel<-select(RGBExt_10_2018,
-                           GlobalID=GlobalID.y,
-                           layer.1,
-                           layer.2,
-                           layer.3)
-
-RGBExt_11_2018.ToModel<-select(PropertyRGBN11.,
-                           GlobalID=GlobalID.y,
-                           layer.1,
-                           layer.2,
-                           layer.3)
-
-RGBExt_12_2018.ToModel<-select(PropertyRGBN12.,
-                           GlobalID=GlobalID.y,
-                           layer.1,
-                           layer.2,
-                           layer.3)
-```
-
-#Export prediction set to avoid reanalyzing
-```{r}
-st_write(RGBExt_10_2018.ToModel, "C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/10_2018/RGBExt_10_2018.ToModel.shp")
-
-
-
-
-```
-
 
 
 # Predict Tarp Status
