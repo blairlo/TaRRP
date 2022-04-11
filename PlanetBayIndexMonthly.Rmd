@@ -57,7 +57,7 @@ PropertySF<-subset(Property, DORAPPDESC=="SINGLE FAMILY")
 
 # Extract Raster Values by Footprint
 
-I firt define a function to 
+I first define a function to 
 ```{r}
 MosaicExtractRaster<-function(RasterLocation,UOA){ # 2 inputs - folder where rasters are stored and the unit of extraction (e.g. polygons, points)
   
@@ -202,6 +202,21 @@ RGBExt_10_2019<-st_write(select(MosaicExtractRaster(
                               layer.3),
                                  "./PlanetData/Monthly/10_2019/RGBExt_10_2019.shp")
 
+#collapse property extracts by month into a list
+RGBExtList<-list(RGBExt_10_2018,
+                 RGBExt_11_2018,
+                 RGBExt_12_2018,
+                 RGBExt_01_2019,
+                 RGBExt_02_2019,
+                 RGBExt_03_2019,
+                 RGBExt_04_2019,
+                 RGBExt_05_2019,
+                 RGBExt_06_2019,
+                 RGBExt_07_2019,
+                 RGBExt_08_2019,
+                 RGBExt_09_2019,
+                 RGBExt_10_2019)
+
 ```
 
 # Reduce to Prediction Set
@@ -209,15 +224,54 @@ RGBExt_10_2019<-st_write(select(MosaicExtractRaster(
 
 # Predict Tarp Status
 ```{r}
-PropertyRGBN10.Modeled <- predict(rf, newdata=PropertyRGBN10.ToModel)
-PropertyRGBN11.Modeled <- predict(rf, newdata=PropertyRGBN11.ToModel)
-PropertyRGBN12.Modeled <- predict(rf, newdata=PropertyRGBN12.ToModel)
+BayRFMonth<-readRDS("BayRFMonth.rds") # Load classification Models (from training file)
+BayLogitMonth<-readRDS("BayLogitMonth.rds")
 
-PropertSF$Tarp10<-PropertyRGBN10.Modeled
-PropertSF$Tarp11<-PropertyRGBN11.Modeled
-PropertSF$Tarp12<-PropertyRGBN12.Modeled
+PropertyRGB.Modeled <- lapply(RGBExtList, predict, object = BayRFMonth)
+#test <- predict(BayRFMonth, newdata=RGBExt_01_2019, type = "response")
+#test<- ifelse(test > 0.5, 1,0)
+#table(test)
 
 ```
+
+### Append classification back to footprint Data as numaric
+```{r}
+PropertySF$Tarp10_2018<-as.numeric(ifelse(PropertyRGB.Modeled[[1]]== "tarp",1,0))
+PropertySF$Tarp11_2018<-as.numeric(ifelse(PropertyRGB.Modeled[[2]]== "tarp",1,0))
+PropertySF$Tarp12_2018<-as.numeric(ifelse(PropertyRGB.Modeled[[3]]== "tarp",1,0))
+PropertySF$Tarp01_2019<-as.numeric(ifelse(PropertyRGB.Modeled[[4]]== "tarp",1,0))
+PropertySF$Tarp02_2019<-as.numeric(ifelse(PropertyRGB.Modeled[[5]]== "tarp",1,0))
+PropertySF$Tarp03_2019<-as.numeric(ifelse(PropertyRGB.Modeled[[6]]== "tarp",1,0))
+PropertySF$Tarp04_2019<-as.numeric(ifelse(PropertyRGB.Modeled[[7]]== "tarp",1,0))
+PropertySF$Tarp05_2019<-as.numeric(ifelse(PropertyRGB.Modeled[[8]]== "tarp",1,0))
+PropertySF$Tarp06_2019<-as.numeric(ifelse(PropertyRGB.Modeled[[9]]== "tarp",1,0))
+PropertySF$Tarp07_2019<-as.numeric(ifelse(PropertyRGB.Modeled[[10]]== "tarp",1,0))
+PropertySF$Tarp08_2019<-as.numeric(ifelse(PropertyRGB.Modeled[[11]]== "tarp",1,0))
+
+```
+
+Select properties with any predicted tarp
+```{r}
+PropertySF$AnyTarp<-ifelse((PropertySF$Tarp10_2018+
+                           PropertySF$Tarp11_2018+
+                           PropertySF$Tarp12_2018+
+                           PropertySF$Tarp01_2019+
+                           PropertySF$Tarp02_2019+
+                           PropertySF$Tarp03_2019+
+                           PropertySF$Tarp04_2019+
+                           PropertySF$Tarp05_2019+
+                           PropertySF$Tarp06_2019+
+                           PropertySF$Tarp07_2019+
+                           PropertySF$Tarp08_2019) >= 1,1,0)
+```
+
+Determine installation and removal month
+```{r}
+
+
+
+```
+
 
 # Make Cover Month
 ```{r}

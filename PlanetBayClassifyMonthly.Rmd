@@ -46,6 +46,37 @@ FootprintsRoof<-st_zm(read_sf("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/
 
 ### Extract Raster values by footprint
 ```{r}
+MosaicExtractRaster<-function(RasterLocation,UOA){ # 2 inputs - folder where rasters are stored and the unit of extraction (e.g. polygons, points)
+  
+  current.list <- list.files(path=paste(RasterLocation), full.names=TRUE, pattern = ".tif") 
+  
+  # read in raster files as a raster stack
+  raster.list<- lapply(current.list, raster::stack) 
+  
+  # clear user defined names if present
+  names(raster.list) <- NULL 
+  
+  # this tells the mosaic function to average any overlapping pixels
+  raster.list$fun <- mean 
+  
+  # mosaic list using the mosaic function the raster package
+  Mosaic <- do.call( raster::mosaic, raster.list)
+  
+  # match coordinate system of the mosaiced raster
+  Mosaic<-projectRaster(Mosaic, crs = crs(UOA))
+  
+  # extract (join) raster values to points or polygons. 
+  ex <- extract(Mosaic, 
+                UOA, 
+                fun=mean, #take the mean raster values (change to sum or other function if desired)
+                na.rm=TRUE,
+                df=TRUE)
+  
+  ex<-cbind(UOA,ex)
+  
+  return(ex)
+}
+
 FootprintsTarpRGB<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/01_2019",FootprintsTarp)
 
 FootprintsRoofRGB<-MosaicExtractRaster("C:/Users/blair/OneDrive/Desktop/PhD/Dissertation/@TemporaryRoofandRecoveryProject/PlanetData/Monthly/01_2019",FootprintsRoof)
@@ -67,13 +98,15 @@ FootprintsRoofRGB<-select(FootprintsRoofRGB,
                            layer.3)
 
 #Label Outcomes
-FootprintsTarpRGB$Tarp<-as.factor(1) 
-FootprintsRoofRGB$Tarp<-as.factor(0)
+FootprintsTarpRGB$TarpRoof<-as.factor("tarp")
+FootprintsRoofRGB$TarpRoof<-as.factor("roof")
 
 
 #stack
-TrainingDat<-rbind(FootprintsTarpRGB,FootprintsRoofRGB)
-TrainingDat<-st_drop_geometry(TrainingDat) #Drop geometry
+TrainingDatTarp<-st_drop_geometry(FootprintsTarpRGB) #Drop geometry
+TrainingDatRoof<-st_drop_geometry(FootprintsRoofRGB)
+
+TrainingDat<-rbind(TrainingDatTarp,TrainingDatRoof)
 
 
 #Split
@@ -85,39 +118,29 @@ test  <- subset(TrainingDat, sample == FALSE)
 
 # Models
 ```{r}
-GLM_RB1<-glm(Tarp~layer.1+layer.3,family = binomial(link="logit"),data =TrainingDat)
+GLM_RB1_Monthly<-glm(TarpRoof~layer.1+layer.3,family = binomial(link="logit"),data =TrainingDat)
 
-hitmiss(GLM_RB1)
+hitmiss(GLM_RB1_Monthly)
 
 ```
 
 # Random Forest Estimator
 ```{r}
-rf <- randomForest(Tarp ~ .,data=train)
-rf#Show results within training set
+rfMonthly <- randomForest(TarpRoof ~ layer.1 + layer.2+ layer.3 ,data=TrainingDat)
+rfMonthly#Show results within training set
 ```
 # Random Forest Out of sample error
 ```{r}
-pred = predict(rf, newdata=test[-5])
+pred = predict(rfMonthly, newdata=test[-5])
 cm = table(test[,5], pred)
 cm #Show results out of sample
 ```
 
 # Save Random Forest
 ```{r}
-saveRDS(rf, "BayPlanetRF.rds")
+saveRDS(rfMonthly, "BayRFMonth.rds")
+saveRDS(GLM_RB1_Monthly, "BayLogitMonth.rds")
 ```
-
-
-```{r}
-tmap_mode("view") #interactive
-#tmap_mode("plot") #static
-
-tm_shape(TrainTarp) + 
-    tm_polygons("layer.1")
-
-```
-
 
 
 
