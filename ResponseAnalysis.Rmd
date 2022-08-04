@@ -1,0 +1,937 @@
+---
+title: "BayWeeklyAnalysis"
+author: "Logan"
+date: "5/31/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Descriptive Statistics
+
+# Prelims
+```{r}
+library(sf)
+library(raster)
+library(stringr)
+library(questionr)
+library(dplyr)
+library(rgdal)
+library(rgeos)
+library(ggplot2)
+library(MASS)
+library(pscl)
+library(reshape2)
+library(data.table)
+require(caTools)
+library(tidycensus)
+library(stargazer)
+library(exactextractr)
+library(ordinal)
+library(estimatr)
+library(osmextract)
+library(ggeffects)
+library(VGAM)
+library(car)
+library(units)
+library(DescTools)
+library(brant)
+```
+
+### Handy summary function for caluclating SE
+```{r}
+## form the R cookbook http://www.cookbook-r.com/Manipulating_data/Summarizing_data/
+## Gives count, mean, standard deviation, standard error of the mean, and confidence interval (default 95%).
+##   data: a data frame.
+##   measurevar: the name of a column that contains the variable to be summarized
+##   groupvars: a vector containing names of columns that contain grouping variables
+##   na.rm: a boolean that indicates whether to ignore NA's
+##   conf.interval: the percent range of the confidence interval (default is 95%)
+summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+    library(plyr)
+
+    # New version of length which can handle NA's: if na.rm==T, don't count them
+    length2 <- function (x, na.rm=FALSE) {
+        if (na.rm) sum(!is.na(x))
+        else       length(x)
+    }
+
+    # This does the summary. For each group's data frame, return a vector with
+    # N, mean, and sd
+    datac <- ddply(data, groupvars, .drop=.drop,
+      .fun = function(xx, col) {
+        c(N    = length2(xx[[col]], na.rm=na.rm),
+          mean = mean   (xx[[col]], na.rm=na.rm),
+          sd   = sd     (xx[[col]], na.rm=na.rm)
+        )
+      },
+      measurevar
+    )
+
+    # Rename the "mean" column    
+    datac <- rename(datac, c("mean" = measurevar))
+
+    datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+
+    # Confidence interval multiplier for standard error
+    # Calculate t-statistic for confidence interval: 
+    # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+    ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+    datac$ci <- datac$se * ciMult
+
+    return(datac)
+}
+```
+
+
+# Load Data
+
+### Downloaded shapefiles and measurments
+```{r}
+ProjectCRS = 2882 #Make project coordinate system
+
+Install_Predicted<-st_read("Building Data/Install_Predicted.shp")%>%
+                              st_transform(ProjectCRS) #pull in time series
+
+Install_Predicted$FootprintArea <- st_area(Install_Predicted)
+Install_Predicted$FootprintArea<-drop_units(Install_Predicted$FootprintArea)
+
+Parcels<-st_read("Building Data/Parcels.shp")%>%
+                              st_transform(ProjectCRS)
+                                  
+
+BayCounty<-st_read("OtherGeoData/Bay_County.shp")%>%
+                    st_transform(ProjectCRS)
+
+MichaelWind<- st_read("OtherGeoData/Michael_ATL_2018_1minMaxSus_OT_FtptSwath_BandedShp_12Oct_0600UTC_v1_Hwind_A.shp")%>%
+                    st_transform(ProjectCRS)
+
+#load and convert sign up locations to points
+ROELocation<- read.csv("Building Data/ROECenters.csv")%>%
+                st_as_sf(coords = c("Longitude", "Latitude"), crs = 4269)%>%
+                  st_transform(crs = ProjectCRS)
+
+
+
+```
+
+### Census areas and stats
+```{r}
+census_api_key("11f26f3fa4866e02a16340fa7037d3811ded2275")
+
+ACSCodebook <- load_variables(2017, "acs5", cache = TRUE)
+#View(ACSCodebook)
+
+BGstats <- get_acs( #download blocks/blockgroup/tracts from Census API
+                        state = "FL", # designate state
+                        geography = "block group", # neighborhood level
+                        variables = c("population" = "B01001_001",
+                                      "households" = "B11001_001",
+                                      "income" = "B19013_001", #household income
+                                      "white" = "B02001_002",
+                                      "bachelors" = "B15003_022",
+                                      "vehicles" = "B992512_002",
+                                      "internet" = "B28002_002",
+                                      "smartphone" = "B28001_005"), #Return population (must pick at least 1 var to run)
+                        output = "wide",
+                        year = 2017,
+                        survey = "acs5",
+                        geometry = TRUE
+                        )%>%
+                          
+                      #make BG lvel percentages (per capita or per household if measured at the household level)
+                      mutate("whiteP" = whiteE/populationE,
+                             "nonwhiteP" = 1 - whiteP,
+                             "bachelorsP" = bachelorsE/populationE,
+                             "vehiclesP" = vehiclesE/populationE,
+                             "internetP" = internetE/householdsE,
+                             "smartphoneP" = whiteE/householdsE)%>%
+                      dplyr::rename(BG_GEOID = GEOID)%>%
+                      st_transform(ProjectCRS)%>% # reproject
+                      st_crop(BayCounty) #clip to study area
+
+
+
+
+```
+
+### OSM Neighborhood features
+Acquiring distances between properties and n neighborhood attributes is laborious depending on the availability of spatialized data at the county/state/US level from many sources (e.g. local GIS websites, US DOT).
+
+One solution is to use Open Street Map, which is an open source mapping application hosted by University
+College London, similar to google maps and on a global scale, but with the main difference being we can
+download it feature by feature.
+
+**Download OSM features as sf object for state**
+I use the osmextract package (https://github.com/ropensci/osmextract) as opposed to the more popular
+osmdata package because of its ability to download entire states worth of data quickly without timeout
+problems. There were also some discrepancies in the osmdata package downloads we could not reconcile
+with online maps. This does not seem to be an issue with osmextract.
+```{r}
+
+run = "N"
+
+if (run=="Y") {
+
+#set Geography
+OSMRegion ="US-FL"
+County= "BAY"
+
+
+#Download all OSM polygons for FL
+osm_poly<- oe_get(OSMRegion,
+layer = "multipolygons",
+stringsAsFactors = FALSE,
+quiet = TRUE)
+
+osm_poly<-st_transform(osm_poly, crs = ProjectCRS) #reproject
+osm_poly<-st_make_valid(osm_poly) #fixes "dangles" and other hand drawing issues
+osm_poly<-st_crop(osm_poly,BayCounty)# reduce data to neighborhood level
+
+
+#Download all OSM points for FL
+osm_points<- oe_get(OSMRegion,
+layer = "points",
+stringsAsFactors = FALSE,
+quiet = TRUE)
+osm_points<-st_transform(osm_points, crs = ProjectCRS) #reproject
+osm_points<-st_make_valid(osm_points) #fixes "dangles" and other hand drawing issues
+osm_points<-st_crop(osm_points,BayCounty)# reduce data to neighborhood level
+
+
+#Download all OSM polylines for FL
+osm_line<- oe_get(OSMRegion,
+layer = "lines",
+stringsAsFactors = FALSE,
+quiet = TRUE)
+
+osm_line<-st_transform(osm_line, crs = ProjectCRS)
+osm_line<-st_make_valid(osm_line)
+osm_line<-st_crop(osm_line,BayCounty)
+
+st_write(osm_poly, "OtherGeoData/osm_poly_Bay.shp")
+st_write(osm_points, "OtherGeoData/osm_points_Bay.shp")
+st_write(osm_line, "OtherGeoData/osm_line_Bay.shp")
+
+
+} else {
+  
+  #osm_poly <-st_read("OtherGeoData/osm_poly_Bay.shp")
+  #osm_points <-st_read("OtherGeoData/osm_points_Bay.shp")
+  osm_line <- st_read("OtherGeoData/osm_line_Bay.shp")
+}
+
+
+```
+
+#Make Full Data Set
+```{r}
+
+#spatial joins
+ProgramTarpTimeUnfilter <- Install_Predicted%>%
+                    st_centroid() %>% #make footprint points
+                    st_join(Parcels, left = TRUE) %>% #append parcel attribute to footprint Point
+                    st_join(MichaelWind, left = TRUE) %>%
+                    st_join(BGstats, left = TRUE) %>%
+                    dplyr::rename(FootprintID=GlblIDF, ParcelID=GlobalID) #make different id names for footprints and parcels
+                
+
+#The following block contains a user defined function that determines the distance from X to Feature Y in Var Y in Layer Y 
+DistToNear<- function(LayerX, LayerY, VarY, FeatureY){ #4 arguments
+      extract<-subset(LayerY, VarY==print(FeatureY)) #choose feature to measure to
+      nearest<-st_nearest_feature(LayerX,extract) #make a list of nearest features
+      dist<-st_distance(LayerX, extract[nearest,], by_element = TRUE) #return the distance
+      attributesY<-st_drop_geometry(extract[nearest,]) #Collect attributes
+      out<-as.data.frame(st_drop_geometry(cbind(LayerX[1],nearest,dist,attributesY))) #combine
+}
+
+
+# Run function to determine dist to nearest ROE signup and OSM neighborhood features
+ROEDist<-DistToNear(LayerX = ProgramTarpTimeUnfilter,
+                 LayerY = ROELocation,
+                 VarY = ROELocation$ROESite,
+                 FeatureY = "1"
+                )
+ROEDist$dist <- drop_units(ROEDist$dist)
+
+
+
+InterstateDis<-DistToNear(LayerX = ProgramTarpTimeUnfilter,
+                 LayerY = osm_line,
+                 VarY = osm_line$highway,
+                 FeatureY = "trunk"
+                )
+
+HighwayDist<-DistToNear(LayerX = ProgramTarpTimeUnfilter,
+                 LayerY = osm_line,
+                 VarY = osm_line$highway,
+                 FeatureY = "primary"
+                )
+
+
+ProgramTarpTimeUnfilter <- ProgramTarpTimeUnfilter%>%
+                              #join Signup Center Distance
+                              left_join(ROEDist, by = "FootprintID")%>%
+                                dplyr::rename(DistROE = dist)%>%
+
+                    
+                              #Join Road Distances
+                              left_join(InterstateDis, by = "FootprintID")%>%
+                                dplyr::rename(DistInterstate = dist)%>%
+  
+                              left_join(HighwayDist, by = "FootprintID")%>%
+                                dplyr::rename(DistHighway = dist)%>%
+  
+                                    #report closest distance between the two hwy types
+                                    mutate(DistToHwy = ifelse(DistInterstate < DistHighway ,DistInterstate,DistHighway ))
+
+#make zipcodes a factor
+ProgramTarpTimeUnfilter$DSITEZIP<-as.factor(ProgramTarpTimeUnfilter$DSITEZIP)
+                 
+```
+
+
+### clean and make more interesting descriptive catagories and transformations
+```{r}
+#make new vars
+ProgramTarpTime <- ProgramTarpTimeUnfilter%>%
+                          mutate(Val_sqf = VAPBLDG/S1AREATTL,
+                                 Val_sqf_med = ifelse(Val_sqf < median(Val_sqf), "BelowMedVal","AboveMeanVal"),
+                                 sqft_stories = S1AREATTL/(ifelse(S1STORIES == 0, 1,S1STORIES)),
+                                 age = (2019-S1YRBLTACT),
+                                 LocalOwner = ifelse(A7MAILST == "FL", 1, 0),
+                                 
+                                 #make simpler building FE
+                                 BuildingType = as.factor(ifelse(DORAPPDESC == "SINGLE FAMILY", "SINGLE FAMILY",
+                                 ifelse(DORAPPDESC == "MULTI-FAMILY 10 LESS","MULTI-FAMILY",
+                                 ifelse(DORAPPDESC =="MULTI-FAMILY 10+ UTS","MULTI-FAMILY",
+                                 ifelse(DORAPPDESC == "MOBILE HOME", "MOBILE HOME", "Other"))))),
+                                 )
+
+#make single family base catagory                                 
+ProgramTarpTime$BuildingType<-relevel(ProgramTarpTime$BuildingType, "SINGLE FAMILY")
+
+#Select only tarped properties and remove outliers
+ProgramTarpTime<-ProgramTarpTime%>%
+                        filter(!is.na(CovrPrd))%>%
+                        filter(!is.na(LocalOwner))%>%
+                       filter(
+                               # BuildingType == "SINGLE FAMILY"
+                               # |BuildingType == "MOBILE HOME"
+                               #|BuildingType == "MULTI-FAMILY"
+                                VAPBLDG> 0
+                                #&VAPBLDG<500000
+                                &FootprintArea> 0
+                                #&FootprintArea<5000
+                                )
+                          
+
+#Assessed Value quantiles
+ProgramTarpTime <- ProgramTarpTime%>%
+                          mutate(AssessValQaurtiles = 
+                            ifelse(CutQ(VAPBLDG) == "Q1","Q1AssessVal",
+                            ifelse(CutQ(VAPBLDG) == "Q2","Q2AssessVal",
+                            ifelse(CutQ(VAPBLDG) == "Q3","Q3AssessVal",
+                            ifelse(CutQ(VAPBLDG) == "Q4","Q4AssessVal",NA)))))
+
+#Size quantiles
+ProgramTarpTime <- ProgramTarpTime%>%
+                          mutate(HomeSizeQaurtiles = 
+                            ifelse(CutQ(FootprintArea) == "Q1","Q1(small)",
+                            ifelse(CutQ(FootprintArea) == "Q2","Q2(medium)",
+                            ifelse(CutQ(FootprintArea) == "Q3","Q3(large)",
+                            ifelse(CutQ(FootprintArea) == "Q4","Q4(very large)",NA)))))
+#Val quantiles
+ProgramTarpTime <- ProgramTarpTime%>%
+                          mutate(HomeValLS = 
+                            ifelse(AssessValQaurtiles == "Q1AssessVal","BelowMeanVal",
+                            ifelse(AssessValQaurtiles == "Q2AssessVal","BelowMeanVal",
+                            ifelse(AssessValQaurtiles == "Q3AssessVal","AboveMeanVal",
+                            ifelse(AssessValQaurtiles == "Q4AssessVal","AboveMeanVal"
+                           ,NA)))))
+
+
+ProgramTarpTime <- ProgramTarpTime%>%
+                    mutate(CovrPrd2 = ifelse(CovrPrd == 10 , 8, CovrPrd))
+
+```
+
+# Plot Descriptive Differences
+```{r}
+
+plot1<-ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd", groupvars=c("HomeSizeQaurtiles")),
+              aes(x=HomeSizeQaurtiles, y=CovrPrd, group=1))+
+                geom_errorbar(width=.1, aes(ymin=CovrPrd-ci, ymax=CovrPrd+ci))+
+                 geom_point(shape=21, size=3, fill="white")
+plot1
+
+
+
+Plot2 <- ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd", groupvars=c("HomeSizeQaurtiles","HomeValLS")),
+       aes(x=HomeSizeQaurtiles, y=CovrPrd, colour=HomeValLS, group=HomeValLS)) +
+  
+    geom_errorbar(aes(ymin=CovrPrd-se, ymax=CovrPrd+se), colour="black", width=.1) +
+    geom_line() +
+    geom_point( size=3, shape=21, fill="white") + # 21 is filled circle
+    xlab("Home Size (Quartiles)") +
+    ylab("Average Time Untill Installation (Weeks)") +
+    scale_colour_hue(name="Assesed Home Value",    # Legend label, use darker colors
+                     #labels=c("Below Median","Above Median"),
+                     l=50, # Use darker colors, lightness=40
+                     guide = guide_legend(reverse=TRUE)) +    
+    theme_bw()+
+            # Position legend in bottom right
+    
+    theme(legend.justification=c(.95,.95),
+          legend.position=c(.95,.95))
+Plot2
+
+Plot3<- ggplot(ProgramTarpTime, aes(x = CovrPrd, y = HomeSizeQaurtiles  )) +
+        geom_boxplot(size = .5) +
+        geom_jitter(alpha = .1) +
+        theme(axis.text.x = element_text( hjust = 1, vjust = 1))
+
+#Plot3
+
+
+```
+
+### Exploratory Regressions
+
+OLS models
+```{r}
+#Intercept Only
+Reg1 <- lm(CovrPrd~1, data = ProgramTarpTime)
+
+#Base Reg
+Reg2 <- lm(CovrPrd~
+          log(FootprintArea)
+          +VAPBLDG
+           , data = ProgramTarpTime)
+
+#Property Level Controls
+Reg3 <- lm(CovrPrd~
+           log(FootprintArea)
+           +log(VAPBLDG)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           , data = ProgramTarpTime)
+
+#Block Group socioeconomic controls
+Reg4 <- lm(CovrPrd~
+            log(FootprintArea)
+           +log(VAPBLDG)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           , data = ProgramTarpTime)
+
+# Zip Code FE
+Reg5 <- lm(CovrPrd~
+           log(FootprintArea)
+           +log(VAPBLDG)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           + as.factor(DSITEZIP)
+          , data = ProgramTarpTime)
+
+
+summary(Reg1)
+summary(Reg2)
+summary(Reg3)
+summary(Reg4)
+summary(Reg5)
+
+```
+
+Poisson models
+```{r}
+
+#Intercept Only
+Reg1a <- glm(((CovrPrd/2)-1)~1
+             , family="poisson"
+             , data = ProgramTarpTime)
+
+#Base Reg
+Reg2a <- glm(((CovrPrd/2)-1)~
+           log(FootprintArea)
+           +log(VAPBLDG)
+           , family="poisson"
+           , data = ProgramTarpTime)
+
+#Property Level Controls
+Reg3a <- glm(((CovrPrd/2)-1)~
+          log(FootprintArea)
+           +log(VAPBLDG)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           , family="poisson"
+           , data = ProgramTarpTime)
+
+#Block Group socioeconomic controls
+Reg4a <- glm(((CovrPrd/2)-1)~
+          log(FootprintArea)
+           +log(VAPBLDG)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           , family="poisson"
+           , data = ProgramTarpTime)
+
+# Zip Code FE
+Reg5a <- glm(((CovrPrd/2)-1)~
+          log(FootprintArea)
+           +log(VAPBLDG)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           + as.factor(DSITEZIP)
+          , family="poisson"
+          , data = ProgramTarpTime)
+
+
+summary(Reg1a)
+summary(Reg2a)
+summary(Reg3a)
+summary(Reg4a)
+summary(Reg5a)
+```
+
+### Ordered Logit. 
+
+In reality response times are not all evenly spaced and are more generalized "bins" that have order from fast to slow. 
+```{r}
+#Intercept Only
+Reg1b <- clm(as.factor((CovrPrd2/2)-1)~ 1
+           , data = ProgramTarpTime)
+
+#Base Reg
+Reg2b <- clm(as.factor((CovrPrd2/2)-1)~
+            log(FootprintArea)
+           +log(VAPBLDG)
+           , data = ProgramTarpTime)
+
+
+#Property Level Controls
+Reg3b <- clm(as.factor((CovrPrd2/2)-1)~
+           log(FootprintArea)
+           +log(VAPBLDG)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           , data = ProgramTarpTime)
+
+#Block Group socioeconomic controls
+Reg4b <- clm(as.factor((CovrPrd2/2)-1)~
+            log(FootprintArea)
+           +log(VAPBLDG)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           , data = ProgramTarpTime)
+
+# Zip Code FE
+Reg5b <-  clm(as.factor((CovrPrd2/2)-1)~
+            log(FootprintArea)
+           +log(VAPBLDG)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           + DSITEZIP
+           , data = ProgramTarpTime)
+
+        
+summary(Reg1b)
+summary(Reg2b)
+summary(Reg3b)
+summary(Reg4b)
+summary(Reg5b)
+
+```
+
+
+```{r warning=FALSE}
+#Test proportional odds assumptions
+scale_test(Reg4b)
+
+ProgramTarpTime$LFootprintArea<-log(ProgramTarpTime$FootprintArea)
+ProgramTarpTime$LVAPBLDG<-log(ProgramTarpTime$VAPBLDG)
+ProgramTarpTime$LX1mSWmphBnd<-log(ProgramTarpTime$X1mSWmphBnd)
+ProgramTarpTime$LX1mSWmphBnd<-log(ProgramTarpTime$X1mSWmphBnd)
+
+test3 <- polr(as.factor(((CovrPrd/2)-1))~
+           LFootprintArea
+           +LVAPBLDG
+           +LX1mSWmphBnd
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           , data = ProgramTarpTime)
+
+poTest(test3)
+brant(test3)
+```
+
+### generlized/partial proportional odds (relaxed parallel assumption with intercept specific estimates)
+```{r}
+#Intercept Only
+Reg1c <- clm(as.factor((CovrPrd2/2)-1)~ 1
+           , data = ProgramTarpTime)
+
+#Base Reg
+Reg2c <- clm(as.factor((CovrPrd2/2)-1)~
+           log(FootprintArea)
+           +log(VAPBLDG)
+           , data = ProgramTarpTime)
+
+
+#Property Level Controls
+Reg3c <- clm(as.factor((CovrPrd2/2)-1)~
+          log(FootprintArea)
+           +log(VAPBLDG)
+           +age+I(age^2)
+           +BuildingType
+           +DistToHwy
+           +LocalOwner,
+              nominal = ~
+              log(X1mSWmphBnd)
+              +DistROE
+            , data = ProgramTarpTime)
+
+#Block Group socioeconomic controls
+Reg4c <- clm(as.factor((CovrPrd2/2)-1)~
+           #log(FootprintArea)
+           log(VAPBLDG)
+           +age+I(age^2)
+           +BuildingType
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP,
+           nominal = ~
+              log(X1mSWmphBnd)
+              +DistROE
+            , data = ProgramTarpTime)
+
+# Zip Code FE
+Reg5c <-  clm(as.factor((CovrPrd2/2)-1)~
+          # log(FootprintArea)
+           log(VAPBLDG)
+           +age+I(age^2)
+           +BuildingType
+           +DistToHwy
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           + DSITEZIP,
+           nominal = ~
+              log(X1mSWmphBnd)
+              +DistROE
+            , data = ProgramTarpTime)
+
+        
+summary(Reg1c)
+summary(Reg2c)
+summary(Reg3c)
+summary(Reg4c)
+summary(Reg5c)
+
+```
+
+## Matching
+```{r}
+
+library(MatchIt)
+
+### Treatment = size , match on val and obs #### 
+#need a binary treatment large homes vs small homes (at least for a first cut)
+ProgramTarpTimeSF<- ProgramTarpTime%>%
+                      filter(BuildingType == "SINGLE FAMILY") %>%
+                      st_drop_geometry()
+                        SFMed<- quantile(ProgramTarpTimeSF$FootprintArea, 0.5)
+                      
+ProgramTarpTimeMF <- ProgramTarpTime%>%
+                      filter(BuildingType == "MULTI-FAMILY") %>%
+                      st_drop_geometry()
+                        MFMed<- quantile(ProgramTarpTimeMF$FootprintArea, 0.5)
+
+ProgramTarpTimeMo <- ProgramTarpTime%>%
+                      filter(BuildingType == "MOBILE HOME") %>%
+                       st_drop_geometry()
+                        MoMed<- quantile(ProgramTarpTimeMo$FootprintArea, 0.5)
+                        
+ProgramTarpTimeOth <- ProgramTarpTime%>%
+                      filter(BuildingType == "Other") %>%
+                       st_drop_geometry()
+                        OthMed<- quantile(ProgramTarpTimeOth$FootprintArea, 0.5)                        
+                        
+ProgramTarpTimeMatch<- ProgramTarpTime%>%
+                      dplyr::mutate(SizeTreatLarge = ifelse(BuildingType == "SINGLE FAMILY" & FootprintArea > as.numeric(SFMed), 1,
+                                              ifelse(BuildingType == "MULTI-FAMILY" & FootprintArea > as.numeric(MFMed), 1,
+                                               ifelse(BuildingType == "MOBILE HOME" & FootprintArea > as.numeric(MoMed), 1,
+                                               ifelse(BuildingType == "Other" & FootprintArea > as.numeric(OthMed), 1,
+                                               0)))))
+
+#Matched Set     
+matchSize <- matchit(SizeTreatLarge ~ VAPBLDG 
+                                    +X1mSWmphBnd
+                                    +age
+                                    +BuildingType
+                                    +DistROE
+                                    +DistToHwy
+                                    +LocalOwner
+                                    +DSITEZIP
+                                   ,data = ProgramTarpTimeMatch
+                                   ,method = 'cem'
+                                    ,k2k = TRUE
+                                   , estimand = 'ATT'
+                                  )
+
+matchSizeSummary<-summary(matchSize)
+matchSizeSummary
+matchSize_df <- match.data(matchSize)
+
+#simple difference
+matchSize_Control<- matchSize_df%>%
+                      filter(SizeTreatLarge==0)
+
+matchSize_Control<- mean(matchSize_Control$CovrPrd2)
+
+matchSize_Treat<- matchSize_df%>%
+                      filter(SizeTreatLarge==1)
+
+matchSize_Treat<- mean(matchSize_Treat$CovrPrd2)
+matchSize_Treat-matchSize_Control
+
+
+#Modeled
+matchSize_model1 <- lm(((CovrPrd2/2)-1) ~ SizeTreatLarge,data = matchSize_df, weights = weights)
+matchSize_model2 <- clm(as.factor((CovrPrd2/2)-1) ~ SizeTreatLarge, data = matchSize_df, weights = weights)
+
+scale_test(matchSize_model2)
+
+summary(matchSize_model1)
+summary(matchSize_model2)
+
+### Treatment = Val , match on size and obs ####
+
+#making a binary treatment is additionally challenging when the data have different categories of building (e.g. single and multi family), this is conditioned for in a regression setting with continuous value, but here we must conditionally dichotomize treatment ahead of time, otherwise matching on building types will be difficult.
+
+
+                        SFMedVal<- quantile(ProgramTarpTimeSF$VAPBLDG, 0.5)
+                        MFMedVal<- quantile(ProgramTarpTimeMF$VAPBLDG, 0.5)
+                        MoMedVal<- quantile(ProgramTarpTimeMo$VAPBLDG, 0.5)
+                       OthMedVal<- quantile(ProgramTarpTimeOth$VAPBLDG, 0.5)
+
+
+ProgramTarpTimeMatch2<- ProgramTarpTime%>%
+                      dplyr::mutate(ValTreatLarge = ifelse(BuildingType == "SINGLE FAMILY" & VAPBLDG > as.numeric(SFMedVal), 1,
+                                              ifelse(BuildingType == "MULTI-FAMILY" & VAPBLDG > as.numeric(MFMedVal), 1,
+                                               ifelse(BuildingType == "MOBILE HOME" & VAPBLDG > as.numeric(MoMedVal), 1,
+                                               ifelse(BuildingType == "Other" & VAPBLDG > as.numeric(OthMedVal), 1,
+                                               0)))))
+
+
+                            
+#Matched Set     
+matchVal <- matchit(ValTreatLarge ~ FootprintArea 
+                                    + X1mSWmphBnd
+                                    +age
+                                    +BuildingType
+                                    +DistROE
+                                    +DistToHwy
+                                    +LocalOwner
+                                    +DSITEZIP
+                                   ,data = ProgramTarpTimeMatch2
+                                   ,method = 'cem'
+                                   ,k2k = TRUE
+                                   , estimand = 'ATT'
+                                  )
+
+matchValSummary<-summary(matchVal, un=TRUE)
+matchValSummary
+matchVal_df <- match.data(matchVal)
+
+#simple difference
+matchVal_Control<- matchVal_df%>%
+                      filter(ValTreatLarge==0)
+
+matchVal_Control<- mean(matchVal_Control$CovrPrd2)
+
+matchVal_Treat<- matchVal_df%>%
+                      filter(ValTreatLarge==1)
+matchVal_Treat<- mean(matchVal_Treat$CovrPrd2)
+matchVal_Treat-matchVal_Control
+
+
+#Modeled
+matchVal_model <- clm(as.factor((CovrPrd2/2)-1) ~ ValTreatLarge, data = matchVal_df, weights = weights)
+scale_test(matchVal_model)
+summary(matchVal_model)
+
+
+```
+
+### Make reg and summary tables
+```{r}
+table1<-stargazer(Reg1, Reg2, Reg3,  Reg4, Reg5,
+                  title="Regression Results (OLS)",
+                  align=TRUE, 
+                  dep.var.labels=c("Response Time (weeks)"),
+                  #covariate.labels=c("Handling of Complaints",
+                  #                  "No Special Privileges",
+                  #                  "Opportunity to Learn",
+                  #                  "Performance-Based Raises",
+                  #                  "Too Critical","
+                  #                  Advancement"),
+                  omit.stat=c("LL","ser","f"), 
+                  #se = starprep(Reg5, clusters = ProgramTarpTime$DSITEZIP),
+                  omit=c("DSITEZIP"),
+                  add.lines=list(c('Zip Code FE', 'No','No','No','No','Yes')),
+                  out = paste(getwd(),"/RegTable1.html", sep=""),
+                  type = "html", #change to latex for final
+                  no.space=TRUE)
+
+table2<-stargazer(Reg1a, Reg2a, Reg3a,  Reg4a, Reg5a,
+                  title="Regression Results (Poission)",
+                  align=TRUE, 
+                  dep.var.labels=c("Response Time (period counts 0 to 4)"),
+                  #covariate.labels=c("Handling of Complaints",
+                  #                  "No Special Privileges",
+                  #                  "Opportunity to Learn",
+                  #                  "Performance-Based Raises",
+                  #                  "Too Critical","
+                  #                  Advancement"),
+                  omit.stat=c("LL","ser","f"), 
+                  omit=c("DSITEZIP"),
+                  add.lines=list(c('Zip Code FE', 'No','No','No','No','Yes')),
+                  out = paste(getwd(),"/RegTable2.html", sep=""),
+                  type = "html", #change to latex for final
+                  no.space=TRUE)
+
+
+table3<-stargazer(Reg1b, Reg2b, Reg3b,  Reg4b, Reg5b,
+                  title="Regression Results (Ordered Logit)",
+                  align=TRUE, 
+                  dep.var.labels=c("Response Time (Catagories 0 to 4)"),
+                  #covariate.labels=c("Handling of Complaints",
+                  #                  "No Special Privileges",
+                  #                  "Opportunity to Learn",
+                  #                  "Performance-Based Raises",
+                  #                  "Too Critical","
+                  #                  Advancement"),
+                  omit.stat=c("LL","ser","f"), 
+                  omit=c("DSITEZIP"),
+                  ord.intercepts = TRUE,
+                  add.lines=list(c('Zip Code FE', 'No','No','No','No','Yes','Yes')),
+                  out = paste(getwd(),"/RegTable3.html", sep=""),
+                  type = "html", #change to latex for final
+                  no.space=TRUE)
+
+table4<-stargazer(Reg1c, Reg2c, Reg3c,  Reg4c, Reg5c,
+                  title="Partial proportional odds (intercept specific estimates)",
+                  align=TRUE, 
+                  dep.var.labels=c("Response Time (Catagories 0 to 4)"),
+                  #covariate.labels=c("Handling of Complaints",
+                  #                  "No Special Privileges",
+                  #                  "Opportunity to Learn",
+                  #                  "Performance-Based Raises",
+                  #                  "Too Critical","
+                  #                  Advancement"),
+                  omit.stat=c("LL","ser","f"), 
+                  omit=c("DSITEZIP"),
+                  ord.intercepts = TRUE,
+                  add.lines=list(c('Zip Code FE', 'No','No','No','No','Yes')),
+                  out = paste(getwd(),"/RegTable4.html", sep=""),
+                  type = "html", #change to latex for final
+                  no.space=TRUE)
+
+## summary table
+
+Datasummary<- ProgramTarpTime%>%
+                dplyr::select(S1AREATTL,
+                       sqft_stories,
+                       VAPTOTAL,
+                       X1mSWmphBnd,
+                       age,
+                       BuildingType,
+                       DistROE,
+                       DistToHwy,
+                       LocalOwner,
+                       nonwhiteP,
+                       bachelorsP,
+                       internetP,
+                       smartphoneP
+                       )%>%
+               
+                          st_drop_geometry()
+
+stargazer(Datasummary,
+                  out = paste(getwd(),"/Summary.html", sep=""),
+                  type = "html" #change to latex for final
+                  )
+
+```
+

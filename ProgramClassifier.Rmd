@@ -1,0 +1,833 @@
+---
+title: "PlanetBayIndex"
+author: "Logan"
+date: "3/22/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(echo=TRUE)
+```
+
+# Prelims
+```{r}
+library(tmap) 
+library(mapview)
+library(sf)
+library(raster)
+library(stringr)
+library(questionr)
+library(dplyr)
+library(tidyr)
+library(rgdal)
+library(rgeos)
+library(ggplot2)
+library(MASS)
+library(pscl)
+library(visreg)
+library(mlogit)
+library(rstanarm)
+library(loo)
+library(bayesplot)
+library(shinystan)
+library(readxl)
+library(reshape2)
+library(data.table)
+library(randomForest)
+require(caTools)
+library(tidycensus)
+library(stargazer)
+library(exactextractr)
+library(gplots)
+library(gtools)
+library(DescTools)
+library(reticulate)
+library(sen2r)
+library(leafem)
+library(parallel)
+library(pbapply)
+
+options(rasterMaxMemory = 3e10)
+options(rasterTmpTime = 1)
+```
+
+# Part 1 Deliniate Roof, Program, and Private Tarps Using High Res Images
+
+### Read in vector training data
+These samples were carefully chosen visually in ArcGIS using building footprint vector provided by Bay County, overlayed with high resolution January Imagry. 
+```{r}
+#read in training plots (program)
+ProgramTarp<-st_zm(read_sf("Building Data/TarpMaster.shp")) %>%
+                    filter(FEATURECOD == 1)
+
+#read in training plots (non-program)
+NonProgramTarp<-st_zm(read_sf("Building Data/TarpMaster.shp")) %>%
+                    filter(FEATURECOD == 0)
+
+#read in training plots (roof/other)
+NoTarp<-st_zm(read_sf("Building Data/RoofMaster.shp"))
+
+#Training Data Update 1
+#read in training plots (program)
+ProgramTarpUpdate1<-st_zm(read_sf("Building Data/ProgramUpdateX.shp"))
+
+#read in training plots (non-program)
+NonProgramTarpUpdate1<-st_zm(read_sf("Building Data/NonProgramUpdateX.shp"))
+
+#read in training plots (roof/other)
+NoTarpUpdate1<-st_zm(read_sf("Building Data/RoofUpdateX.shp"))
+
+
+```
+
+### Function extract image by footprint and save seperatly as .tif(s)
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+#function with 4 arguments
+ClipRasterSave <- function(raster,clippingfeatures,outpath,labelvar){
+
+#make projections equal
+clippingfeaturesproj<-st_transform(clippingfeatures, crs(raster))
+
+#crop training plots that overlap image
+CroppedFeatures<-st_crop(clippingfeaturesproj, extent(raster))
+
+#check to make sure features and images overlap. 
+if (length(CroppedFeatures$geometry) > 0) { #If so run:
+  
+         clip.list<-lapply(1:nrow(CroppedFeatures), function(x)
+          #crop imagery to the footprint extents and mask over non-footprint pixel
+            clips<-raster::mask(crop(raster, 
+                                     extent(CroppedFeatures[x,])), 
+                                     CroppedFeatures[x,])) %>%
+            #make 3 band        
+            lapply(dropLayer, 4)
+
+names(clip.list) <- CroppedFeatures[[labelvar]]
+
+mapply(writeRaster
+       ,clip.list
+       ,file=paste0(outpath, names(clip.list)) #export by name
+       ,overwrite=TRUE
+       ,format="GTiff"
+       ,datatype="INT1U"
+       ,options="TFW=YES"
+      )
+
+} else { 
+#if not return nothing (to avoid a problematic error in loops)
+}
+  }
+
+```
+
+### Extract image by footprint
+```{r}
+#make a list of images
+current.list <- list.files(path=paste("AerialImages"), full.names=TRUE, pattern = ".tif")
+
+#read in as a list of raster stacks
+raster.list <- lapply(current.list, raster::stack)
+
+
+#loop function over list
+ProgramClips<-lapply(raster.list
+                 ,ClipRasterSave
+                 ,clippingfeatures = ProgramTarp
+                 ,outpath = "TarpClips/train/Program/"
+                 ,labelvar = "GlobalID"
+                  )
+
+NonProgramClips<-lapply(raster.list
+                 ,ClipRasterSave
+                 ,clippingfeatures = NonProgramTarp
+                 ,outpath = "TarpClips/train/@NonProgram/"
+                 ,labelvar = "GlobalID"
+                  )
+
+NoTarpClips<-lapply(raster.list
+                 ,ClipRasterSave
+                 ,clippingfeatures = NoTarp
+                 ,outpath = "TarpClips/train/@@NoTarp/"
+                 ,labelvar = "GlobalID"
+                  )
+
+#updates
+ProgramClipsUpdate1<-lapply(raster.list
+                 ,ClipRasterSave
+                 ,clippingfeatures = ProgramTarpUpdate1
+                 ,outpath = "TarpClips/train/Program/"
+                 ,labelvar = "Buildin_17"
+                  )
+
+NonProgramClipsUpdate1<-lapply(raster.list
+                 ,ClipRasterSave
+                 ,clippingfeatures = NonProgramTarpUpdate1
+                 ,outpath = "TarpClips/train/@NonProgram/"
+                 ,labelvar = "Buildin_17"
+                  )
+NoTarpClipsUpdate1<-lapply(raster.list
+                 ,ClipRasterSave
+                 ,clippingfeatures = NoTarpUpdate1
+                 ,outpath = "TarpClips/train/@@NoTarp/"
+                 ,labelvar = "GlobalID"
+                  )
+
+
+
+```
+
+# ML Model
+### Install Karas / Tensor Flow
+
+We'll need to pull in some additional machine learning software and packages with pre-trained NNs
+```{r}
+#install.packages("keras")
+#reticulate::install_miniconda()
+#keras::install_keras()
+#if issues try a different (older version
+#install_tensorflow(version = "2.5.0", extra_packages="pillow")
+#install_keras(tensorflow = "2.5.0", extra_packages="pillow") #be sure this matched your tensorflow version installed
+
+library(reticulate) #python-R Bridge
+
+#be sure anaconda is installed and read/write permissions are open in its directory paths
+#you'll need to install tensorflow
+
+library(tensorflow)
+
+
+library(keras)
+
+```
+
+### Describe image data
+```{r}
+label_list <- dir("TarpClips/train/")
+output_n <- length(label_list)
+save(label_list, file= "label_list.R")
+width <- 224
+height<- 224
+target_size <- c(width, height)
+rgb <- 3 #color channels
+
+#assign rescale values and training split
+train_data_gen <- image_data_generator(
+  rescale = 1/255, 
+  validation_split = .2,
+  width_shift_range = 0.1,
+  height_shift_range = 0.1,
+  rotation_range=20,
+  shear_range = .1,
+  horizontal_flip = TRUE,
+  vertical_flip = TRUE
+  )
+
+#subset training set
+train_images <- flow_images_from_directory("TarpClips/train/"
+  ,train_data_gen
+  ,subset = 'training'
+  ,target_size = target_size
+  ,class_mode = "categorical"
+  ,shuffle=F
+  ,classes = label_list
+  ,seed = 42
+  )
+
+#subset validation set
+validation_images <- flow_images_from_directory("TarpClips/train/"
+ ,train_data_gen
+ ,subset = 'validation'
+ ,target_size = target_size
+ ,class_mode = "categorical"
+ ,shuffle=F
+ ,classes = label_list
+ ,seed = 42
+ )
+
+#verify
+table(train_images$classes)
+```
+
+### write model
+```{r}
+# Set up with xception base model trained on image net
+mod_base <- application_xception(weights = 'imagenet', 
+   include_top = FALSE, 
+   input_shape = c(width, height, 3))
+
+freeze_weights(mod_base)
+
+# Write model perameters
+model_function <- function(
+  learning_rate = 0.001, 
+  dropoutrate=0.20, 
+  n_dense=1024){
+  
+  k_clear_session()
+  
+  model <- keras_model_sequential() %>%
+    mod_base %>% 
+    layer_global_average_pooling_2d() %>% 
+    layer_dense(units = n_dense) %>%
+    layer_activation("relu") %>%
+    layer_dropout(dropoutrate) %>%
+    layer_dense(units=output_n, activation="softmax")
+  
+  model %>% compile(
+    loss = "categorical_crossentropy",
+    optimizer = optimizer_adam(lr = learning_rate),
+    metrics = "accuracy"
+  )
+  
+  return(model)
+  
+}
+
+model <- model_function()
+model
+
+```
+
+### fit model to highest layer (training data)
+```{r}
+#if model not in-memory
+batch_size <- 50
+epochs <- 200
+
+hist <- model %>% fit_generator(
+  train_images, # our training data from above
+  steps_per_epoch = train_images$n %/% 
+  batch_size, 
+  epochs = epochs, 
+  validation_data = validation_images, # our validation data from above
+  validation_steps = validation_images$n %/% 
+  batch_size,
+  verbose = 2,
+  
+  #callback and checkpoint saves
+  callbacks = list(
+    
+  #stop for condition
+   # callback_early_stopping(monitor = "val_loss", 
+   # mode = "min", 
+   # patience = 50),
+    
+  #avoid overwriting the model file unless val_accuracy has improved.
+    callback_model_checkpoint(
+    filepath = "Checkpoint_model6.h5",
+    monitor = "val_loss",
+    mode = "min",
+    save_best_only = TRUE)
+  )
+   )
+
+model %>% save_model_hdf5("ProgramModel6.h5")
+
+plot(hist)
+
+```
+
+### evaluate holdout test set
+```{r}
+path_test <- "TarpClips/test/" #set path to the test data
+
+test_data_gen <- image_data_generator(rescale = 1/255) #rescale as before
+
+test_images <- flow_images_from_directory(path_test,
+   test_data_gen,
+   target_size = target_size,
+   class_mode = "categorical",
+   classes = label_list,
+   shuffle = F,
+   seed = 42)
+
+model %>% evaluate(test_images)
+
+model %>% evaluate(validation_images)
+
+```
+
+# Predict full data
+
+###load most recent model weights if not in-memory
+```{r}
+#Last model
+model <- load_model_hdf5("ProgramModel6.h5")
+
+#"best" model
+model<-load_model_hdf5("Checkpoint_model6.h5")
+
+```
+
+### Funtion to loop over footprints/ imagery and predict
+```{r}
+PredictRasterClips <- function(raster,clippingfeatures,labelvar, model=model){
+
+#make projections equal
+clippingfeaturesproj<-st_transform(clippingfeatures, crs(raster))
+
+#crop training plots that overlap image
+CroppedFeatures<-st_crop(clippingfeaturesproj, extent(raster))
+
+#check to make sure features and images overlap. 
+  if (length(CroppedFeatures$geometry) > 0) { #If so run:
+
+#perform extraction and prediction at the row level
+    clip.list<-lapply(1:nrow(CroppedFeatures), function(x){
+
+          #crop imagery to the footprint extents and mask over non-footprint pixel
+            clips<-raster::mask(crop(raster, 
+                                     extent(CroppedFeatures[x,])), 
+                                     CroppedFeatures[x,])%>%
+                                      dropLayer(4)
+            
+            
+            
+            #save clip as a temporary .tif
+            writeRaster(clips
+                  ,filename ="x.tif"
+                  ,overwrite=TRUE
+                  ,format="GTiff"
+                  ,datatype="INT1U"
+                  ,options="TFW=YES"
+                  )
+            
+
+
+#load image
+width <- 224
+height<- 224
+target_size <- c(width, height)
+test_image <- image_load("x.tif", target_size = target_size)
+y <- image_to_array(test_image)
+y <- array_reshape(y, c(1, dim(y)))
+y <- y/255
+
+#Predict image
+pred <- model %>% predict(y)%>%
+         cbind(CroppedFeatures[x,][labelvar])
+  
+  })
+
+#compile list of individual predictions as a data frame by image
+pred<-as.data.frame(do.call(rbind,clip.list))%>%
+                                rename(NoTarp = X1,
+                                NonProgramProb  = X2,
+                                ProgramProb = X3) %>%
+  
+                  #make prediction based on membership prob.
+                  mutate(ProgramPred = ifelse(ProgramProb > NoTarp & ProgramProb > NonProgramProb, 1,0)) %>%
+                  mutate(NoPProb = ifelse(NonProgramProb > ProgramProb & NonProgramProb > NoTarp, 1,0)) %>%
+                  mutate(NoTPred = ifelse(NoTarp > ProgramProb & NoTarp > NonProgramProb, 1,0))
+                  
+                          
+ 
+} else { 
+#if not return nothing (to avoid a problematic error in loops)
+}
+
+  }
+
+```
+
+### Predict image by footprint across multiple rasters
+```{r}
+#make a list of images
+current.list <- list.files(path=paste("E:/Imagery/2019/TIFF/2019H"), full.names=TRUE, pattern = ".tif")
+
+#read in as a list of raster stacks
+raster.list <- lapply(current.list, raster::stack)
+
+#read in Bay county footprints and match crs
+Footprints<-st_zm(read_sf("Building Data/BuildingFootprints.shp")) %>%
+                            select(GlobalIDFootprint = GlobalID)%>%
+                                st_make_valid()
+
+#run loop
+Program_PredictedH<-lapply(raster.list
+                      ,PredictRasterClips
+                      ,clippingfeatures = Footprints 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+
+
+#convert list of data frames to single data frame
+Program_PredictedH <- as.data.frame(do.call(rbind,Program_PredictedH))
+
+Program_PredictedH <-left_join(Footprints,Program_PredictedH, by="GlobalIDFootprint")%>%
+                                    filter(!is.na(ProgramProb))
+
+st_write(Program_PredictedH,"Building Data/Program_PredictedH.shp",append=TRUE)
+
+```
+
+The code above is ran in batches (A, B, C etc.) The following combines into one shapefile/dataframe an adds a quality flag for low probability classification.
+```{r}
+Program_Predicted.list <- list(st_read("Building Data/Program_PredictedA.shp"),
+                                 st_read("Building Data/Program_PredictedB.shp"),
+                                 st_read("Building Data/Program_PredictedC.shp"),
+                                 st_read("Building Data/Program_PredictedD.shp"),
+                                 st_read("Building Data/Program_PredictedE.shp"),
+                                 st_read("Building Data/Program_PredictedF.shp"),
+                                 st_read("Building Data/Program_PredictedG.shp"),
+                                 st_read("Building Data/Program_PredictedH.shp"))
+
+ProgramPredicted <- do.call(rbind, Program_Predicted.list) %>%
+                              #remove ID duplicates, which can occur when a footprint sits on the boarder of an image.
+                               distinct(GlblIDF,.keep_all = TRUE)
+
+#DELETE THIS LINE IF RERUNING WHOLE ANALYSIS. IT ONLY EXIST BECASUE I FORGOT A STEP IN THE PRDEICT FUNCTION, BUT HAS BEEN INCLUDED NOW FOR FUTURE USE. I also mixed up headers for non-program and no-tarp probabilities which gets a correction below but will not be an issue if the analysis was predicted from scratch.
+ProgramPredicted<-ProgramPredicted %>%
+  
+                     rename(NnPrgrP = NoTarp,
+                            NoTarp = NnPrgrP) %>%
+  
+                  mutate( NoPPred = ifelse(NnPrgrP > PrgrmPrb & NnPrgrP > NoTarp, 1,0)) %>%
+                  mutate( NoTPred =  ifelse(NoTarp > PrgrmPrb & NoTarp > NnPrgrP, 1,0))
+
+```
+
+## Compute raw test error
+Note that there are several point here where data is exported to ArcGIS for visual analysis and marking errors by hand. I've tried to be clear where this occurs, but for this reason this next section of code is not "push button" so to speak. There is a necessary human element that occurs at several points between error marking and correction. It occurred to me later that the test set withheld from training above was still taken from the general sampling area (albeit still not used in estimation). From what I know now about heterogeneity in home construction over space, errors from that test data might be too optimistic (bordering 85-90% accurate). The technique below seeks to remedy this by drawing test samples that were predicted out of sample *and out of sample area*. 
+```{r}
+#Make out-of-sample test sets to assess post estimation accuracy / confusion
+SampledProperties <- st_read("Building Data/SampledProperties.shp") #list of properties in sample areas
+
+#Make data set that has not been used for training
+Unsampled <- ProgramPredicted%>%
+                st_join(SampledProperties, by = GlblIDF)%>%
+                filter(is.na(GlblIDF.y))
+
+
+#take samples from each category (original predictions)
+set.seed(1000)
+TestSet1old <- Unsampled %>%
+                filter(PrgrmPrd == 1)%>%
+                slice_sample(n=100,replace = FALSE)%>%
+                  mutate(sample = "Program")
+
+set.seed(1000)
+TestSet2old <- Unsampled %>%
+                filter(NoPPred == 1)%>%
+                slice_sample(n=100,replace = FALSE)%>%
+                  mutate(sample = "NonProg")
+
+set.seed(1000)
+TestSet3old <- Unsampled %>%
+                filter(NoTPred == 1)%>%
+                slice_sample(n=100,replace = FALSE)%>%
+                  mutate(sample = "NoTarp")
+
+TestSetOld <- rbind(TestSet1old,TestSet2old,TestSet3old)%>%
+              mutate(Program = 0, NonProg = 0,NoTarp =0 )%>% #indicators to be filled out
+              select(GlblIDF = GlblIDF.x,
+                     sample,
+                     PrgrmPrd,
+                     NoPPred,
+                     NoTPred,
+                     Program,
+                     NonProg,
+                     NoTarp
+                     )
+
+#EXPORT FOR EVALUATION
+st_write(TestSetOld,"Building Data/TestSetOld.shp", overwrite = TRUE)
+
+#bring in evaluated data
+TestSetOldMarked <- read_sf("Building Data/TestSetOldMarked.shp")
+
+ConfusionMatrixOld <- TestSetOldMarked %>%
+                    group_by(sample) %>%
+                    summarise('Program Tarp' = sum(Program),
+                              'No Tarp' = sum(NoTarp),
+                              'Non Program Tarp' = sum(NonProg)) %>%
+                    arrange(desc(sample)) %>%
+                    st_drop_geometry() %>%
+                    rename('Expected' = sample)
+
+ConfusionMatrixOld
+
+#make duplicate prediction vectors for manual correction
+ProgramPredicted <- ProgramPredicted %>%
+                      mutate(PrgrmPrdN = PrgrmPrd,
+                             NnPrgrPrdN = NoPPred,
+                             NoTarpN = NoTPred)
+
+#Export For evaluation
+st_write(ProgramPredicted,"Building Data/ProgramPredictedEval.shp", overwrite = TRUE)
+```
+
+
+# Error Analysis
+```{r}
+#Read in after manual correction ArcGIS
+ProgramPredictedEvaluated<-st_read("Building Data/ProgramPredictedEvaluated.shp")
+
+#Mark type 1 and type 2 errors
+ProgramPredictedEvaluated <- ProgramPredictedEvaluated %>%
+                          mutate(Type1Error = ifelse(PrgrmPrd == 1 & PrgrmPrdN == 0, 1,0),
+                                 Type2Error = ifelse(PrgrmPrd == 0 & PrgrmPrdN == 1, 1,0))
+
+
+#summarize adjustments
+ErrorTable <- as.data.frame(ProgramPredictedEvaluated) %>%
+  
+                  summarise("Original Predictions" = sum(PrgrmPrd),
+                            "Type 1 Errors" = sum(Type1Error),
+                            "Type 2 Errors" = sum(Type2Error),
+                            "Adjusted Predictions" = sum(PrgrmPrdN))%>%
+  
+                            pivot_longer(everything())
+
+ErrorTable
+```
+
+
+### Plot predictions and error
+```{r, fig.height = 6.5, fig.width = 20}
+
+AllProperties<-tm_shape(ProgramPredictedEvaluated)+
+      tm_polygons(col = "grey", alpha = 1, border.col ="grey", border.alpha = .75)+
+  tm_layout(
+    main.title = "All Properties (n=115,168)", 
+    main.title.position = "center")
+      
+ProgramTarp<-tm_shape(ProgramPredictedEvaluated%>%
+                filter(PrgrmPrdN == 1))+
+     tm_polygons(col = "blue", alpha = 1, border.col ="blue", border.alpha = .75)+
+      tm_layout(
+       main.title = "Program Tarps (n=2,997)", 
+       main.title.position = "center")
+
+Type1Error<-tm_shape(ProgramPredictedEvaluated%>%
+                filter(Type1Error == 1)) +
+      tm_polygons(col = "green", alpha = 1, border.col ="green", border.alpha = .75)+
+    tm_layout(
+    main.title = "Type 1 Errors (n=1,020)", 
+    main.title.position = "center")
+
+
+Type2Error<-tm_shape(ProgramPredictedEvaluated%>%
+                filter(Type2Error == 1)) +
+      tm_polygons(col = "red", alpha = 1, border.col ="red", border.alpha = .75)+
+    tm_layout(
+    main.title = "Known Type 2 Errors (n=463)", 
+    main.title.position = "center")
+
+
+#tmap_arrange(AllProperties,Type1Error,ProgramTarp, Type2Error, ncol = 4)
+```
+
+### Fishnet Hotspot analysis
+```{r, fig.height = 6.5, fig.width = 20}
+fishnet<- st_make_grid(ProgramPredictedEvaluated, cellsize = 2640, what = "polygons")%>%
+    st_as_sf() %>%
+   rename(geometry = x) %>%
+    mutate(fishnet_id = 1:n())
+
+fishnetStats <- ProgramPredictedEvaluated%>%
+                st_join(fishnet)%>%
+                 mutate(properties = 1)%>%
+                  group_by(fishnet_id) %>%
+                    summarise(properties = sum(properties),
+                              PrgrmPrdN = sum(PrgrmPrdN),
+                              NnPrgrPrdN = sum(NnPrgrPrdN),
+                              NoTarpN = sum(NoTarpN),
+                              Type1Error = sum(Type1Error),
+                              Type2Error = sum(Type2Error)
+                              )%>%
+                                st_drop_geometry()
+
+fishnetStats <- left_join(fishnet, fishnetStats, by = "fishnet_id")%>% 
+                               replace(is.na(.), 0)
+
+fishnetStats <- fishnetStats %>%
+                  mutate(ProgPerCap = PrgrmPrdN/properties,
+                         NonProgPerCap  = ProgPerCap/properties,
+                         Type1ErrPerCap = Type1Error/properties,
+                         Type2ErrPerCap = Type2Error/properties)
+
+
+Fishnetplot<-tm_shape(ProgramPredictedEvaluated)+
+      tm_polygons(col = "grey", alpha = 1, border.col ="grey", border.alpha = .75)+
+  tm_layout(
+    main.title = "All Properties (n=115,168)", 
+    main.title.position = "center") +
+  
+  tm_shape(fishnet)+
+    tm_polygons( alpha = 0)+
+    tm_borders(col = "black", lwd = .5, lty = "solid", alpha = NA)
+
+FishnetStatsplot1<-  tm_shape(fishnetStats)+
+                      tm_polygons( "properties",palette = "Greys",colorNA = NULL, border.alpha = .05, style = "jenks")+
+                        tm_layout(
+                        main.title = "Property Density", 
+                        main.title.position = "center")
+
+FishnetStatsplot2<-  tm_shape(fishnetStats)+
+                      tm_polygons( "ProgPerCap",palette = "Blues",colorNA = NULL, border.alpha = .05, style = "jenks")+
+                        tm_layout(
+                        main.title = "Predicted Program Per Capita", 
+                        main.title.position = "center")
+
+FishnetStatsplot3<-  tm_shape(fishnetStats)+
+                      tm_polygons( "Type1ErrPerCap",palette = "Greens",colorNA = NULL, border.alpha = .05, style = "jenks")+
+                        tm_layout(
+                        main.title = "Type 1 Error Per Capita", 
+                        main.title.position = "center")
+
+FishnetStatsplot4<-  tm_shape(fishnetStats)+
+                      tm_polygons( "Type2ErrPerCap",palette = "Reds",colorNA = NULL, border.alpha = .05, style = "jenks")+
+                         tm_layout(
+                         main.title = "Type 2 Error Per Capita", 
+                         main.title.position = "center")
+
+
+#tmap_arrange(FishnetStatsplot1, FishnetStatsplot2, FishnetStatsplot3,FishnetStatsplot4, ncol=4)
+
+#FishnetStatsplot2
+
+```
+
+### Point error analysis
+```{r}
+library(spatstat)
+library(stars)
+
+
+#Meaure and Plot Error Density
+PointCluster1<-st_centroid(ProgramPredictedEvaluated %>% filter(Type2Error == 1 |Type1Error == 1 ))
+
+PointCluster1.ppp <- as.ppp(st_geometry(PointCluster1))
+marks(PointCluster1.ppp)  <- NULL
+PointCluster1.km <- rescale(PointCluster1.ppp, 1000, "km")
+
+ann.p <- mean(nndist(PointCluster1.km, k=1))
+ann.p
+
+#Measure and Plot Counterfactual Density 
+DensityRaster <- st_rasterize(fishnetStats %>% select(PrgrmPrdN, geometry))
+DensityRaster.im <- as.im(DensityRaster)
+DensityRaster.km <- rescale(DensityRaster.im, 1000, "km")
+
+n     <- 5000L
+ann.r <- vector(length=n)
+for (i in 1:n){
+  rand.p   <- rpoint(n=PointCluster1.km$n, f=DensityRaster.km) #simulate the same number of random points as the counter factual weighted by population density
+  ann.r[i] <- mean(nndist(rand.p, k=1))
+}
+
+plot(PointCluster1.km,  main="Type 2 Error")
+
+plot(rand.p, main="Simulated Null" )
+
+
+ann.counterfactual <- mean(nndist(rand.p))
+ann.counterfactual
+
+hist(ann.r, main=NULL, las=1, breaks=40, col="bisque", xlim=range(ann.p, ann.r))
+abline(v=ann.p, col="blue")
+
+N.greater <- sum(ann.r > ann.p)
+p <- min(N.greater + 1, n + 1 - N.greater) / (n +1)
+p
+
+```
+
+### Error corrilations across obvervables
+```{r}
+#read in covariates
+ProjectCRS = 2882 #Make project coordinate system
+
+Parcels<-st_read("Building Data/Parcels.shp")%>%
+                              st_transform(ProjectCRS)
+
+BayCounty<-st_read("OtherGeoData/Bay_County.shp")%>%
+                    st_transform(ProjectCRS)
+
+MichaelWind<- st_read("OtherGeoData/Michael_ATL_2018_1minMaxSus_OT_FtptSwath_BandedShp_12Oct_0600UTC_v1_Hwind_A.shp")%>%
+                    st_transform(ProjectCRS)
+```
+
+### Census areas and stats
+```{r}
+census_api_key("11f26f3fa4866e02a16340fa7037d3811ded2275")
+
+ACSCodebook <- load_variables(2017, "acs5", cache = TRUE)
+#View(ACSCodebook)
+
+BGstats <- get_acs( #download blocks/blockgroup/tracts from Census API
+                        state = "FL", # designate state
+                        geography = "block group", # neighborhood level
+                        variables = c("population" = "B01001_001",
+                                      "households" = "B11001_001",
+                                      "income" = "B19013_001", #household income
+                                      "white" = "B02001_002",
+                                      "bachelors" = "B15003_022",
+                                      "vehicles" = "B992512_002",
+                                      "internet" = "B28002_002",
+                                      "smartphone" = "B28001_005"), #Return population (must pick at least 1 var to run)
+                        output = "wide",
+                        year = 2017,
+                        survey = "acs5",
+                        geometry = TRUE
+                        )%>%
+                          
+                      #make BG lvel percentages (per capita or per household if measured at the household level)
+                      mutate("whiteP" = whiteE/populationE,
+                             "nonwhiteP" = 1 - whiteP,
+                             "bachelorsP" = bachelorsE/populationE,
+                             "vehiclesP" = vehiclesE/populationE,
+                             "internetP" = internetE/householdsE,
+                             "smartphoneP" = whiteE/householdsE)%>%
+                      dplyr::rename(BG_GEOID = GEOID)%>%
+                      st_transform(ProjectCRS)%>% # reproject
+                      st_crop(BayCounty) #clip to study area
+
+```
+
+```{r}
+ProgramPredictedEvaluatedVars <- ProgramPredictedEvaluated%>%
+                    st_transform(ProjectCRS)%>%
+                    st_centroid() %>% #make footprint points
+                    st_join(Parcels, left = TRUE) %>% #append parcel attribute to footprint Point
+                    st_join(MichaelWind, left = TRUE) %>%
+                    st_join(BGstats, left = TRUE) %>%
+                    st_join(Tractstats) %>%
+                    dplyr::rename(FootprintID=GlblIDF, ParcelID=GlobalID)
+
+
+```
+
+test for corrilations
+```{r}
+
+ErrorCor <- lm(Type2Error~
+          S1AREATTL
+           +VAPTOTAL
+           +X1mSWmphBnd
+           +S1YRBLTACT
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           #, family = "binomial" 
+           , data = filter(ProgramPredictedEvaluatedVars, PrgrmPrdN == 1))
+
+summary(ErrorCor)
+```
+
+
+
+#Export Program ids
+```{r}
+st_write(ProgramPredictedEvaluated %>%
+                filter(PrgrmPrdN == 1) %>%
+                select(GlblIDF),"Building Data/Programids.shp")
+
+```
+
+
+
