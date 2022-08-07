@@ -1,0 +1,220 @@
+---
+title: "InstallationClassifier"
+author: "Logan"
+date: '2022-07-20'
+output: html_document
+---
+# Prelims
+```{r}
+library(tmap) 
+library(mapview)
+library(sf)
+library(raster)
+library(stringr)
+library(questionr)
+library(dplyr)
+library(tidyr)
+library(rgdal)
+library(rgeos)
+library(ggplot2)
+library(MASS)
+library(pscl)
+library(visreg)
+library(mlogit)
+library(rstanarm)
+library(loo)
+library(bayesplot)
+library(shinystan)
+library(readxl)
+library(reshape2)
+library(data.table)
+library(randomForest)
+require(caTools)
+library(tidycensus)
+library(stargazer)
+library(exactextractr)
+library(gplots)
+library(gtools)
+library(DescTools)
+library(reticulate)
+library(sen2r)
+library(leafem)
+library(parallel)
+library(pbapply)
+
+options(rasterMaxMemory = 3e10)
+options(rasterTmpTime = 1)
+```
+
+# Predict full data
+
+###load most recent model weights if not in-memory
+```{r}
+library(keras)
+library(reticulate) #python-R Bridge
+library(tensorflow)
+
+#"best" model
+model <- load_model_hdf5("Checkpoint_model_installation4.h5") #this is technically trained on Program tarps, but should be plenty generalizable to tarps in general.
+
+```
+
+### Funtion to loop over footprints/ imagery and predict
+```{r}
+PredictRasterClips <- function(raster,clippingfeatures,labelvar, model=model){
+
+#make projections equal
+clippingfeaturesproj<-st_transform(clippingfeatures, crs(raster))
+
+#crop training plots that overlap image
+CroppedFeatures<-st_crop(clippingfeaturesproj, extent(raster))
+
+#make 3 band
+raster<- dropLayer(raster,4)
+
+#check to make sure features and images overlap. 
+  if (length(CroppedFeatures$geometry) > 0) { #If so run:
+
+#perform extraction and prediction at the row level
+    clip.list<-lapply(1:nrow(CroppedFeatures), function(x){
+
+          #crop imagery to the footprint extents and mask over non-footprint pixel
+            clips<-raster::mask(crop(raster, 
+                                     extent(CroppedFeatures[x,])), 
+                                     CroppedFeatures[x,])
+            
+            scaleF<- function(x){((x - min(raster::minValue(raster))) * 255)/((max(raster::maxValue(raster)))/5) - min(raster::minValue(raster)) + 0}
+            
+          #re scale to maximum value of raster to 255 (e.g. 8 bit)
+          clips <- calc(clips,scaleF)
+         
+#limit max to 255
+clips<- clamp(clips, 0, 255)
+            
+            #save clip as a temporary .tif
+            writeRaster(clips
+                  ,filename ="x.tif"
+                  ,overwrite=TRUE
+                  ,format="GTiff"
+                  ,datatype="INT1U"
+                  #,options="TFW=YES"
+                  )
+            
+#load image
+width <- 10
+height<- 10
+target_size <- c(width, height)
+test_image <- image_load("x.tif", target_size = target_size)
+y <- image_to_array(test_image)
+y <- array_reshape(y, c(1, dim(y)))
+y <- y/255
+
+#Predict image
+pred <- model %>% predict(y)%>%
+         cbind(CroppedFeatures[x,][labelvar])
+  
+  })
+
+#compile list of individual predictions as a data frame by image
+pred<-as.data.frame(do.call(rbind,clip.list))%>%
+                                dplyr::rename(NoTarpProb = X1, TarpProb  = X2)
+                                              
+  
+                  #make prediction based on membership prob.
+                 # mutate(ProgramPred = ifelse(ProgramProb > NoTarpProb, 1,0))
+                  
+                          
+ 
+} else { 
+#if not return nothing (to avoid a problematic error in loops)
+}
+
+  }
+
+```
+
+
+### Make non-program IDs
+```{r}
+#NonProgramids<-st_read("Building Data/ProgramPredictedEvaluated.shp")%>%
+#                filter(NnPrgrPrdN == 1)%>%
+#                select(GlblIDF)
+
+#st_write(NonProgramids,"Building Data/NonProgramids.shp")
+
+NonProgramids<- st_read()
+
+```
+
+### Predict image by footprint across multiple rasters
+```{r}
+#make a list of images
+current.list <- list.files(path=paste("PlanetTrainingComposite"), full.names=TRUE, pattern = ".tif")
+
+#read in as a list of raster stacks
+raster.list <- lapply(current.list, raster::stack)
+
+#read in Bay county footprints and match crs
+Footprints<-st_zm(read_sf("Building Data/NonProgramids.shp")) %>%
+                            select(GlobalIDFootprint = GlblIDF)%>%
+                                st_make_valid()
+
+#run loop
+NProgram_Predicted_10_31<-lapply(raster.list
+                      ,PredictRasterClips
+                      ,clippingfeatures = Footprints
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+
+
+#convert list of data frames to single data frame
+NProgram_Predicted_10_31 <- as.data.frame(do.call(rbind,NProgram_Predicted_10_31))
+
+NProgram_Predicted_10_31 <-left_join(Footprints,NProgram_Predicted_10_31, by="GlobalIDFootprint")%>%
+                                    filter(!is.na(TarpProb))
+
+st_write(NProgram_Predicted_10_31,"Building Data/NProgram_Predicted_10_31.shp")
+
+```
+
+### Create Installation index based on prediction week
+```{r}
+Install_Predicted <- cbind (st_read("Building Data/Program_Predicted_10_19.shp")%>%
+                                        mutate(TarpP1 = PrgrmPrd)%>%
+                                        select(GlblIDF,TarpP1),
+                            st_read("Building Data/Program_Predicted_10_31.shp")%>%
+                                        mutate(TarpP2 = PrgrmPrd)%>%
+                                        select(TarpP2),
+                            st_read("Building Data/Program_Predicted_11_16.shp")%>%
+                                        mutate(TarpP3 = PrgrmPrd)%>%
+                                        select(TarpP3),
+                            st_read("Building Data/Program_Predicted_11_21.shp")%>%
+                                        mutate(TarpP4 = PrgrmPrd)%>%
+                                        select(TarpP4),
+                            st_read("Building Data/Program_Predicted_12_4.shp")%>%
+                                        mutate(TarpP5 = PrgrmPrd)%>%
+                                        select(TarpP5),
+                            st_read("Building Data/Program_Predicted_1_10.shp")%>%
+                                        mutate(TarpP6 = PrgrmPrd)%>%
+                                        select(TarpP6)
+                            ) %>%
+                              select(-geometry.1,-geometry.2,-geometry.3,-geometry.4,-geometry.5)
+
+Install_Predicted<-Install_Predicted%>%
+                        mutate(CovrPrd = 
+  ifelse(TarpP1 == "1",  2,
+  ifelse(TarpP1 == "0" & TarpP2 =="1",4,
+  ifelse(TarpP1 == "0" & TarpP2 =="0" & TarpP3 =="1",6,
+  ifelse(TarpP1 == "0" & TarpP2 =="0" & TarpP3 =="0" & TarpP4 =="1",8,                           
+  ifelse(TarpP1 == "0" & TarpP2 =="0" & TarpP3 =="0" & TarpP4 =="0" & TarpP5 =="1",10,                            
+  NA)))))) # note that we are not concerned with P6 since its out of program range. These have all been confirmed program properties in January.
+
+table(Install_Predicted$CovrPrd)
+
+st_write(Install_Predicted, "Building Data/Install_Predicted.shp")
+```
+
+
+
+

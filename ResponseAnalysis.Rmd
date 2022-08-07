@@ -890,7 +890,7 @@ table3<-stargazer(Reg1b, Reg2b, Reg3b,  Reg4b, Reg5b,
                   type = "html", #change to latex for final
                   no.space=TRUE)
 
-table4<-stargazer(Reg1c, Reg2c, Reg3c,  Reg4c, Reg5c,
+table4<-stargazer(Reg1c, Reg2c, Reg3c,Reg4c, Reg5c,
                   title="Partial proportional odds (intercept specific estimates)",
                   align=TRUE, 
                   dep.var.labels=c("Response Time (Catagories 0 to 4)"),
