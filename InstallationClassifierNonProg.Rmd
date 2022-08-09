@@ -55,7 +55,7 @@ library(reticulate) #python-R Bridge
 library(tensorflow)
 
 #"best" model
-model <- load_model_hdf5("Checkpoint_model_installation4.h5") #this is technically trained on Program tarps, but should be plenty generalizable to tarps in general.
+model <- load_model_hdf5("Checkpoint_model_installation4.h5") #this is technically trained on Program tarps, but should be applicable to tarps in general at this resolution.
 
 ```
 
@@ -133,7 +133,6 @@ pred<-as.data.frame(do.call(rbind,clip.list))%>%
 
 ```
 
-
 ### Make non-program IDs
 ```{r}
 #NonProgramids<-st_read("Building Data/ProgramPredictedEvaluated.shp")%>%
@@ -142,7 +141,7 @@ pred<-as.data.frame(do.call(rbind,clip.list))%>%
 
 #st_write(NonProgramids,"Building Data/NonProgramids.shp")
 
-NonProgramids<- st_read()
+NonProgramids<- st_read("Building Data/NonProgramids.shp")
 
 ```
 
@@ -160,7 +159,7 @@ Footprints<-st_zm(read_sf("Building Data/NonProgramids.shp")) %>%
                                 st_make_valid()
 
 #run loop
-NProgram_Predicted_10_31<-lapply(raster.list
+NProgram_Predicted_12_4<-lapply(raster.list
                       ,PredictRasterClips
                       ,clippingfeatures = Footprints
                       ,labelvar = "GlobalIDFootprint"
@@ -169,12 +168,12 @@ NProgram_Predicted_10_31<-lapply(raster.list
 
 
 #convert list of data frames to single data frame
-NProgram_Predicted_10_31 <- as.data.frame(do.call(rbind,NProgram_Predicted_10_31))
+NProgram_Predicted_12_4 <- as.data.frame(do.call(rbind,NProgram_Predicted_12_4))
 
-NProgram_Predicted_10_31 <-left_join(Footprints,NProgram_Predicted_10_31, by="GlobalIDFootprint")%>%
+NProgram_Predicted_12_4 <-left_join(Footprints,NProgram_Predicted_12_4, by="GlobalIDFootprint")%>%
                                     filter(!is.na(TarpProb))
 
-st_write(NProgram_Predicted_10_31,"Building Data/NProgram_Predicted_10_31.shp")
+st_write(NProgram_Predicted_12_4,"Building Data/NProgram_Predicted_12_4.shp")
 
 ```
 
