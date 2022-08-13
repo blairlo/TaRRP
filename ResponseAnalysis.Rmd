@@ -151,7 +151,7 @@ BGstats <- get_acs( #download blocks/blockgroup/tracts from Census API
                         geometry = TRUE
                         )%>%
                           
-                      #make BG lvel percentages (per capita or per household if measured at the household level)
+                      #make BG level percentages (per capita or per household if measured at the household level)
                       mutate("whiteP" = whiteE/populationE,
                              "nonwhiteP" = 1 - whiteP,
                              "bachelorsP" = bachelorsE/populationE,
@@ -237,10 +237,10 @@ st_write(osm_line, "OtherGeoData/osm_line_Bay.shp")
 
 #spatial joins
 TarpTimeUnfilter <- CInstall_Predicted%>%
-                    st_centroid() %>% #make footprint points
-                    st_join(Parcels, left = TRUE) %>% #append parcel attribute to footprint Point
-                    st_join(MichaelWind, left = TRUE) %>%
-                    st_join(BGstats, left = TRUE) %>%
+                    #st_centroid() %>% #make footprint points
+                    st_join(Parcels, left = TRUE, largest=TRUE) %>% #append parcel attribute to footprint Point
+                    st_join(MichaelWind, left = TRUE, largest=TRUE) %>%
+                    st_join(BGstats, left = TRUE, largest=TRUE) %>%
                     dplyr::rename(FootprintID=GlblIDF, ParcelID=GlobalID) #make different id names for footprints and parcels
                 
 
@@ -319,13 +319,13 @@ TarpTime<-TarpTime%>%
                         filter(!is.na(CovrPrd))%>%
                         filter(!is.na(LocalOwner))%>%
                        filter(
-                               # BuildingType == "SINGLE FAMILY"
-                               # |BuildingType == "MOBILE HOME"
-                               #|BuildingType == "MULTI-FAMILY"
-                                VAPBLDG> 0
-                                #&VAPBLDG<500000
-                                &FootprintArea> 0
-                                #&FootprintArea<5000
+                                 BuildingType == "SINGLE FAMILY"
+                                |BuildingType == "MOBILE HOME"
+                               # |BuildingType == "MULTI-FAMILY"
+                                &VAPBLDG> 1000
+                                &VAPBLDG<100000
+                                &FootprintArea> 100
+                                &FootprintArea<10000
                                 )
                           
 
@@ -355,7 +355,7 @@ TarpTime <- TarpTime%>%
 
 
 TarpTime <- TarpTime%>%
-                    mutate(CovrPrd2 = ifelse(CovrPrd == 10 , 8, CovrPrd))
+                    mutate(CovrPrd2 = ifelse(CovrPrd >4 , 6, CovrPrd))
 
 #Separate Program, Non Program, and Both
 ProgramTarpTime<-filter(TarpTime, Program==1)
@@ -367,18 +367,18 @@ NProgramTarpTime<-filter(TarpTime, Program==0)
 # Plot Descriptive Differences
 ```{r}
 
-plot1<-ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd", groupvars=c("HomeSizeQaurtiles")),
-              aes(x=HomeSizeQaurtiles, y=CovrPrd, group=1))+
-                geom_errorbar(width=.1, aes(ymin=CovrPrd-ci, ymax=CovrPrd+ci))+
+plot1<-ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd2", groupvars=c("HomeSizeQaurtiles")),
+              aes(x=HomeSizeQaurtiles, y=CovrPrd2, group=1))+
+                geom_errorbar(width=.1, aes(ymin=CovrPrd2-ci, ymax=CovrPrd2+ci))+
                  geom_point(shape=21, size=3, fill="white")
 plot1
 
 
 
-Plot2 <- ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd", groupvars=c("HomeSizeQaurtiles","HomeValLS")),
-       aes(x=HomeSizeQaurtiles, y=CovrPrd, colour=HomeValLS, group=HomeValLS)) +
+Plot2 <- ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd2", groupvars=c("HomeSizeQaurtiles","HomeValLS")),
+       aes(x=HomeSizeQaurtiles, y=CovrPrd2, colour=HomeValLS, group=HomeValLS)) +
   
-    geom_errorbar(aes(ymin=CovrPrd-se, ymax=CovrPrd+se), colour="black", width=.1) +
+    geom_errorbar(aes(ymin=CovrPrd2-se, ymax=CovrPrd2+se), colour="black", width=.1) +
     geom_line() +
     geom_point( size=3, shape=21, fill="white") + # 21 is filled circle
     xlab("Home Size (Quartiles)") +
@@ -394,12 +394,12 @@ Plot2 <- ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd", groupvars=c("Ho
           legend.position=c(.95,.95))
 Plot2
 
-Plot3<- ggplot(ProgramTarpTime, aes(x = CovrPrd, y = HomeSizeQaurtiles  )) +
+Plot3<- ggplot(ProgramTarpTime, aes(x = CovrPrd2, y = HomeSizeQaurtiles  )) +
         geom_boxplot(size = .5) +
         geom_jitter(alpha = .1) +
         theme(axis.text.x = element_text( hjust = 1, vjust = 1))
 
-#Plot3
+Plot3
 
 
 ```
@@ -409,16 +409,16 @@ Plot3<- ggplot(ProgramTarpTime, aes(x = CovrPrd, y = HomeSizeQaurtiles  )) +
 OLS models
 ```{r}
 #Intercept Only
-Reg1 <- lm(CovrPrd~1, data = ProgramTarpTime)
+Reg1 <- lm(CovrPrd2~1, data = ProgramTarpTime)
 
 #Base Reg
-Reg2 <- lm(CovrPrd~
+Reg2 <- lm(CovrPrd2~
           log(FootprintArea)
           +VAPBLDG
            , data = ProgramTarpTime)
 
 #Property Level Controls
-Reg3 <- lm(CovrPrd~
+Reg3 <- lm(CovrPrd2~
            log(FootprintArea)
            +log(VAPBLDG)
            +log(X1mSWmphBnd)
@@ -430,7 +430,7 @@ Reg3 <- lm(CovrPrd~
            , data = ProgramTarpTime)
 
 #Block Group socioeconomic controls
-Reg4 <- lm(CovrPrd~
+Reg4 <- lm(CovrPrd2~
             log(FootprintArea)
            +log(VAPBLDG)
            +log(X1mSWmphBnd)
@@ -446,7 +446,7 @@ Reg4 <- lm(CovrPrd~
            , data = ProgramTarpTime)
 
 # Zip Code FE
-Reg5 <- lm(CovrPrd~
+Reg5 <- lm(CovrPrd2~
            log(FootprintArea)
            +log(VAPBLDG)
            +log(X1mSWmphBnd)
@@ -471,9 +471,7 @@ summary(Reg5)
 
 ```
 
-
 ### Ordered Logit. 
-
 In reality response times are not all evenly spaced and are more generalized "bins" that have order from fast to slow. 
 ```{r}
 #Intercept Only
@@ -769,8 +767,7 @@ summary(matchVal_model)
 
 # Non-Program Results
 
-### Ordered Logit. 
-
+### Ordered Logit.
 In reality response times are not all evenly spaced and are more generalized "bins" that have order from fast to slow. 
 ```{r}
 #Intercept Only
@@ -806,10 +803,10 @@ Reg4d <- clm(as.factor((CovrPrd2/2)-1)~
            +DistROE
            +DistToHwy
            +LocalOwner
-           +nonwhiteP
+           +whiteP
            +bachelorsP
            +internetP
-           +smartphoneP
+          # +smartphoneP
            , data = NProgramTarpTime)
 
 # Zip Code FE
@@ -822,10 +819,10 @@ Reg5d <-  clm(as.factor((CovrPrd2/2)-1)~
            +DistROE
            +DistToHwy
            +LocalOwner
-           +nonwhiteP
+           +whiteP
            +bachelorsP
            +internetP
-           +smartphoneP
+           #+smartphoneP
            + DSITEZIP
            , data = NProgramTarpTime)
 
@@ -839,7 +836,6 @@ summary(Reg5d)
 ```
 
 #Combined Results
-
 ```{r}
 #Intercept Only
 Reg1e <- clm(as.factor((CovrPrd2/2)-1)~ 1
@@ -910,7 +906,6 @@ summary(Reg5e)
 
 ```
 
-
 ### Matching For Non-Program Counterfactual
 ```{r}
 #Matched Set     
@@ -922,11 +917,11 @@ matchProgram <- matchit(Program ~ FootprintArea
                                     +DistROE
                                     +DistToHwy
                                     +LocalOwner
-                                    +DSITEZIP
+                                   # +DSITEZIP
                                    ,data = TarpTime
                                    ,method = 'cem'
                                    ,k2k = TRUE
-                                   , estimand = 'ATT'
+                                   ,estimand = 'ATT'
                                   )
 
 matchProgramSummary<-summary(matchProgram)
@@ -938,34 +933,34 @@ Matched, Ordered Logit
 ```{r}
 #Intercept Only
 Reg1f <- clm(as.factor((CovrPrd2/2)-1)~ 1
-           , data = matchProgram_df)
+           , data = filter(matchProgram_df, Program==1))
 
 #Base Reg
 Reg2f <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
             +log(VAPBLDG)
-            +Program
-           , data = matchProgram_df)
+            #+Program
+           , data = filter(matchProgram_df, Program==1))
 
 
 #Property Level Controls
 Reg3f <- clm(as.factor((CovrPrd2/2)-1)~
            log(FootprintArea)
            +log(VAPBLDG)
-           +Program
+           #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
-           , data = matchProgram_df)
+           , data = filter(matchProgram_df, Program==1))
 
 #Block Group socioeconomic controls
 Reg4f <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
            +log(VAPBLDG)
-           +Program
+           #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -976,13 +971,13 @@ Reg4f <- clm(as.factor((CovrPrd2/2)-1)~
            +bachelorsP
            +internetP
            +smartphoneP
-           , data = matchProgram_df)
+           , data = filter(matchProgram_df, Program==1))
 
 # Zip Code FE
 Reg5f <-  clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
            +log(VAPBLDG)
-           +Program
+           #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -994,7 +989,7 @@ Reg5f <-  clm(as.factor((CovrPrd2/2)-1)~
            +internetP
            +smartphoneP
            + DSITEZIP
-           , data = matchProgram_df)
+           , data = filter(matchProgram_df, Program==1))
 
         
 summary(Reg1f)
