@@ -320,22 +320,21 @@ TarpTime<-TarpTime%>%
                         filter(!is.na(LocalOwner))%>%
                        filter(
                                  BuildingType == "SINGLE FAMILY"
-                                |BuildingType == "MOBILE HOME"
-                               # |BuildingType == "MULTI-FAMILY"
-                                &VAPBLDG> 1000
-                                &VAPBLDG<100000
+                                 |BuildingType == "MOBILE HOME"
+                                 |BuildingType == "MULTI-FAMILY"
+                                &VAPTOTAL> 100
+                                &VAPTOTAL<10000000
                                 &FootprintArea> 100
                                 &FootprintArea<10000
                                 )
-                          
-
+ 
 #Assessed Value quantiles
 TarpTime <- TarpTime%>%
                           mutate(AssessValQaurtiles = 
-                            ifelse(CutQ(VAPBLDG) == "Q1","Q1AssessVal",
-                            ifelse(CutQ(VAPBLDG) == "Q2","Q2AssessVal",
-                            ifelse(CutQ(VAPBLDG) == "Q3","Q3AssessVal",
-                            ifelse(CutQ(VAPBLDG) == "Q4","Q4AssessVal",NA)))))
+                            ifelse(CutQ(VAPTOTAL) == "Q1","Q1AssessVal",
+                            ifelse(CutQ(VAPTOTAL) == "Q2","Q2AssessVal",
+                            ifelse(CutQ(VAPTOTAL) == "Q3","Q3AssessVal",
+                            ifelse(CutQ(VAPTOTAL) == "Q4","Q4AssessVal",NA)))))
 
 #Size quantiles
 TarpTime <- TarpTime%>%
@@ -414,13 +413,13 @@ Reg1 <- lm(CovrPrd2~1, data = ProgramTarpTime)
 #Base Reg
 Reg2 <- lm(CovrPrd2~
           log(FootprintArea)
-          +VAPBLDG
+          +VAPTOTAL
            , data = ProgramTarpTime)
 
 #Property Level Controls
 Reg3 <- lm(CovrPrd2~
            log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -432,7 +431,7 @@ Reg3 <- lm(CovrPrd2~
 #Block Group socioeconomic controls
 Reg4 <- lm(CovrPrd2~
             log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -448,7 +447,7 @@ Reg4 <- lm(CovrPrd2~
 # Zip Code FE
 Reg5 <- lm(CovrPrd2~
            log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -481,14 +480,14 @@ Reg1b <- clm(as.factor((CovrPrd2/2)-1)~ 1
 #Base Reg
 Reg2b <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            , data = ProgramTarpTime)
 
 
 #Property Level Controls
 Reg3b <- clm(as.factor((CovrPrd2/2)-1)~
            log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -500,7 +499,7 @@ Reg3b <- clm(as.factor((CovrPrd2/2)-1)~
 #Block Group socioeconomic controls
 Reg4b <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -516,7 +515,7 @@ Reg4b <- clm(as.factor((CovrPrd2/2)-1)~
 # Zip Code FE
 Reg5b <-  clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -545,13 +544,13 @@ summary(Reg5b)
 scale_test(Reg4b)
 
 ProgramTarpTime$LFootprintArea<-log(ProgramTarpTime$FootprintArea)
-ProgramTarpTime$LVAPBLDG<-log(ProgramTarpTime$VAPBLDG)
+ProgramTarpTime$LVAPTOTAL<-log(ProgramTarpTime$VAPTOTAL)
 ProgramTarpTime$LX1mSWmphBnd<-log(ProgramTarpTime$X1mSWmphBnd)
 ProgramTarpTime$LX1mSWmphBnd<-log(ProgramTarpTime$X1mSWmphBnd)
 
 test3 <- polr(as.factor(((CovrPrd/2)-1))~
            LFootprintArea
-           +LVAPBLDG
+           +LVAPTOTAL
            +LX1mSWmphBnd
            +age+I(age^2)
            +BuildingType
@@ -573,14 +572,14 @@ Reg1c <- clm(as.factor((CovrPrd2/2)-1)~ 1
 #Base Reg
 Reg2c <- clm(as.factor((CovrPrd2/2)-1)~
            log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            , data = ProgramTarpTime)
 
 
 #Property Level Controls
 Reg3c <- clm(as.factor((CovrPrd2/2)-1)~
           log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +age+I(age^2)
            +BuildingType
            +DistToHwy
@@ -593,7 +592,7 @@ Reg3c <- clm(as.factor((CovrPrd2/2)-1)~
 #Block Group socioeconomic controls
 Reg4c <- clm(as.factor((CovrPrd2/2)-1)~
            log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +age+I(age^2)
            +BuildingType
            +LocalOwner
@@ -609,7 +608,7 @@ Reg4c <- clm(as.factor((CovrPrd2/2)-1)~
 # Zip Code FE
 Reg5c <-  clm(as.factor((CovrPrd2/2)-1)~
            log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +age+I(age^2)
            +BuildingType
            +DistToHwy
@@ -666,7 +665,7 @@ ProgramTarpTimeMatch<- ProgramTarpTime%>%
                                                0)))))
 
 #Matched Set     
-matchSize <- matchit(SizeTreatLarge ~ VAPBLDG 
+matchSize <- matchit(SizeTreatLarge ~ VAPTOTAL 
                                     +X1mSWmphBnd
                                     +age
                                     +BuildingType
@@ -711,17 +710,17 @@ summary(matchSize_model2)
 #making a binary treatment is additionally challenging when the data have different categories of building (e.g. single and multi family), this is conditioned for in a regression setting with continuous value, but here we must conditionally dichotomize treatment ahead of time, otherwise matching on building types will be difficult.
 
 
-                        SFMedVal<- quantile(ProgramTarpTimeSF$VAPBLDG, 0.5)
-                        MFMedVal<- quantile(ProgramTarpTimeMF$VAPBLDG, 0.5)
-                        MoMedVal<- quantile(ProgramTarpTimeMo$VAPBLDG, 0.5)
-                       OthMedVal<- quantile(ProgramTarpTimeOth$VAPBLDG, 0.5)
+                        SFMedVal<- quantile(ProgramTarpTimeSF$VAPTOTAL, 0.5)
+                        MFMedVal<- quantile(ProgramTarpTimeMF$VAPTOTAL, 0.5)
+                        MoMedVal<- quantile(ProgramTarpTimeMo$VAPTOTAL, 0.5)
+                       OthMedVal<- quantile(ProgramTarpTimeOth$VAPTOTAL, 0.5)
 
 
 ProgramTarpTimeMatch2<- ProgramTarpTime%>%
-                      dplyr::mutate(ValTreatLarge = ifelse(BuildingType == "SINGLE FAMILY" & VAPBLDG > as.numeric(SFMedVal), 1,
-                                              ifelse(BuildingType == "MULTI-FAMILY" & VAPBLDG > as.numeric(MFMedVal), 1,
-                                               ifelse(BuildingType == "MOBILE HOME" & VAPBLDG > as.numeric(MoMedVal), 1,
-                                               ifelse(BuildingType == "Other" & VAPBLDG > as.numeric(OthMedVal), 1,
+                      dplyr::mutate(ValTreatLarge = ifelse(BuildingType == "SINGLE FAMILY" & VAPTOTAL > as.numeric(SFMedVal), 1,
+                                              ifelse(BuildingType == "MULTI-FAMILY" & VAPTOTAL > as.numeric(MFMedVal), 1,
+                                               ifelse(BuildingType == "MOBILE HOME" & VAPTOTAL > as.numeric(MoMedVal), 1,
+                                               ifelse(BuildingType == "Other" & VAPTOTAL > as.numeric(OthMedVal), 1,
                                                0)))))
 
 
@@ -767,8 +766,7 @@ summary(matchVal_model)
 
 # Non-Program Results
 
-### Ordered Logit.
-In reality response times are not all evenly spaced and are more generalized "bins" that have order from fast to slow. 
+Ordered Logit
 ```{r}
 #Intercept Only
 Reg1d <- clm(as.factor((CovrPrd2/2)-1)~ 1
@@ -777,14 +775,14 @@ Reg1d <- clm(as.factor((CovrPrd2/2)-1)~ 1
 #Base Reg
 Reg2d <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            , data = NProgramTarpTime)
 
 
 #Property Level Controls
 Reg3d <- clm(as.factor((CovrPrd2/2)-1)~
            log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -796,7 +794,7 @@ Reg3d <- clm(as.factor((CovrPrd2/2)-1)~
 #Block Group socioeconomic controls
 Reg4d <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -806,13 +804,13 @@ Reg4d <- clm(as.factor((CovrPrd2/2)-1)~
            +whiteP
            +bachelorsP
            +internetP
-          # +smartphoneP
+           +smartphoneP
            , data = NProgramTarpTime)
 
 # Zip Code FE
 Reg5d <-  clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
@@ -822,7 +820,7 @@ Reg5d <-  clm(as.factor((CovrPrd2/2)-1)~
            +whiteP
            +bachelorsP
            +internetP
-           #+smartphoneP
+           +smartphoneP
            + DSITEZIP
            , data = NProgramTarpTime)
 
@@ -852,7 +850,7 @@ Reg2e <- clm(as.factor((CovrPrd2/2)-1)~
 #Property Level Controls
 Reg3e <- clm(as.factor((CovrPrd2/2)-1)~
            log(FootprintArea)*Program
-           +log(VAPBLDG)*Program
+           +log(VAPTOTAL)*Program
 
            +log(X1mSWmphBnd)
            +age+I(age^2)
@@ -865,7 +863,7 @@ Reg3e <- clm(as.factor((CovrPrd2/2)-1)~
 #Block Group socioeconomic controls
 Reg4e <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)*Program
-           +log(VAPBLDG)*Program
+           +log(VAPTOTAL)*Program
 
            +log(X1mSWmphBnd)
            +age+I(age^2)
@@ -882,7 +880,7 @@ Reg4e <- clm(as.factor((CovrPrd2/2)-1)~
 # Zip Code FE
 Reg5e <-  clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)*Program
-           +log(VAPBLDG)*Program
+           +log(VAPTOTAL)*Program
 
            +log(X1mSWmphBnd)
            +age+I(age^2)
@@ -910,7 +908,7 @@ summary(Reg5e)
 ```{r}
 #Matched Set     
 matchProgram <- matchit(Program ~ FootprintArea
-                                    +VAPBLDG 
+                                    +VAPTOTAL 
                                     +X1mSWmphBnd
                                     +age
                                     +BuildingType
@@ -933,37 +931,37 @@ Matched, Ordered Logit
 ```{r}
 #Intercept Only
 Reg1f <- clm(as.factor((CovrPrd2/2)-1)~ 1
-           , data = filter(matchProgram_df, Program==1))
+           , data = filter(matchProgram_df, Program==0))
 
 #Base Reg
 Reg2f <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
-            +log(VAPBLDG)
+            +log(VAPTOTAL)
             #+Program
-           , data = filter(matchProgram_df, Program==1))
+           , data = filter(matchProgram_df, Program==0))
 
 
 #Property Level Controls
 Reg3f <- clm(as.factor((CovrPrd2/2)-1)~
            log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           +BuildingType
+           #+BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
-           , data = filter(matchProgram_df, Program==1))
+           , data = filter(matchProgram_df, Program==0))
 
 #Block Group socioeconomic controls
 Reg4f <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           +BuildingType
+           #+BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -971,16 +969,16 @@ Reg4f <- clm(as.factor((CovrPrd2/2)-1)~
            +bachelorsP
            +internetP
            +smartphoneP
-           , data = filter(matchProgram_df, Program==1))
+           , data = filter(matchProgram_df, Program==0))
 
 # Zip Code FE
 Reg5f <-  clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)
-           +log(VAPBLDG)
+           +log(VAPTOTAL)
            #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           +BuildingType
+          # +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -989,7 +987,7 @@ Reg5f <-  clm(as.factor((CovrPrd2/2)-1)~
            +internetP
            +smartphoneP
            + DSITEZIP
-           , data = filter(matchProgram_df, Program==1))
+           , data = filter(matchProgram_df, Program==0))
 
         
 summary(Reg1f)
@@ -1009,18 +1007,19 @@ Reg1g <- clm(as.factor((CovrPrd2/2)-1)~ 1
 
 #Base Reg
 Reg2g <- clm(as.factor((CovrPrd2/2)-1)~
-            log(FootprintArea)*Program
-           +VAPTOTAL*Program
+            log(FootprintArea)
+           +VAPTOTAL
+           +Program
            , data = matchProgram_df)
 
 
 #Property Level Controls
 Reg3g <- clm(as.factor((CovrPrd2/2)-1)~
            log(FootprintArea)*Program
-           +log(VAPBLDG)*Program
+           +log(VAPTOTAL)*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           +BuildingType
+           #+BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -1029,10 +1028,10 @@ Reg3g <- clm(as.factor((CovrPrd2/2)-1)~
 #Block Group socioeconomic controls
 Reg4g <- clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)*Program
-           +log(VAPBLDG)*Program
+           +log(VAPTOTAL)*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           +BuildingType
+          # +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -1045,10 +1044,11 @@ Reg4g <- clm(as.factor((CovrPrd2/2)-1)~
 # Zip Code FE
 Reg5g <-  clm(as.factor((CovrPrd2/2)-1)~
             log(FootprintArea)*Program
-           +log(VAPBLDG)*Program
+           +log(VAPTOTAL)*Program
+           
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           +BuildingType
+          # +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
