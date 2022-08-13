@@ -57,6 +57,8 @@ library(tensorflow)
 #"best" model
 model <- load_model_hdf5("Checkpoint_model_installation4.h5") #this is technically trained on Program tarps, but should be applicable to tarps in general at this resolution.
 
+model
+
 ```
 
 ### Funtion to loop over footprints/ imagery and predict
