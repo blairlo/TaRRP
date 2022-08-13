@@ -93,8 +93,16 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
 ```{r}
 ProjectCRS = 2882 #Make project coordinate system
 
+NInstall_Predicted<-st_read("Building Data/NInstall_Predicted.shp")%>%
+                              st_transform(ProjectCRS) %>% #pull in time series
+                              mutate(Program = 0)
+
 Install_Predicted<-st_read("Building Data/Install_Predicted.shp")%>%
-                              st_transform(ProjectCRS) #pull in time series
+                              st_transform(ProjectCRS)%>% #pull in time series
+                              select(-TarpP6)%>%
+                              mutate(Program = 1)
+Install_Predicted<-rbind(NInstall_Predicted,Install_Predicted)
+
 
 Install_Predicted$FootprintArea <- st_area(Install_Predicted)
 Install_Predicted$FootprintArea<-drop_units(Install_Predicted$FootprintArea)
@@ -102,9 +110,8 @@ Install_Predicted$FootprintArea<-drop_units(Install_Predicted$FootprintArea)
 Parcels<-st_read("Building Data/Parcels.shp")%>%
                               st_transform(ProjectCRS)
                                   
-
 BayCounty<-st_read("OtherGeoData/Bay_County.shp")%>%
-                    st_transform(ProjectCRS)
+                              st_transform(ProjectCRS)
 
 MichaelWind<- st_read("OtherGeoData/Michael_ATL_2018_1minMaxSus_OT_FtptSwath_BandedShp_12Oct_0600UTC_v1_Hwind_A.shp")%>%
                     st_transform(ProjectCRS)
@@ -357,7 +364,20 @@ ProgramTarpTime <- ProgramTarpTime%>%
 ProgramTarpTime <- ProgramTarpTime%>%
                     mutate(CovrPrd2 = ifelse(CovrPrd == 10 , 8, CovrPrd))
 
+#Continue with Program, NonProgram, or Both?
+run = "Program"
+if (run=="Program") {
+  test<-filter(ProgramTarpTime, Program==1)
+  
+  if (run=="NonProgram") {
+    test<-filter(ProgramTarpTime, Program==0)
+    
+    if (run=="Both") {
+      test<-ProgramTarpTime
+  }}}
+
 ```
+
 
 # Plot Descriptive Differences
 ```{r}
