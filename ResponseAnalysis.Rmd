@@ -366,18 +366,26 @@ NProgramTarpTime<-filter(TarpTime, Program==0)
 # Plot Descriptive Differences
 ```{r}
 
-plot1<-ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd2", groupvars=c("HomeSizeQaurtiles")),
-              aes(x=HomeSizeQaurtiles, y=CovrPrd2, group=1))+
-                geom_errorbar(width=.1, aes(ymin=CovrPrd2-ci, ymax=CovrPrd2+ci))+
+plot1a<-ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd", groupvars=c("HomeSizeQaurtiles")),
+              aes(x=HomeSizeQaurtiles, y=CovrPrd, group=1))+
+                geom_errorbar(width=.1, aes(ymin=CovrPrd-ci, ymax=CovrPrd+ci))+
                  geom_point(shape=21, size=3, fill="white")
-plot1
+plot1a
+
+plot1b<-ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd", groupvars=c("AssessValQaurtiles")),
+              aes(x=AssessValQaurtiles, y=CovrPrd, group=1))+
+                geom_errorbar(width=.1, aes(ymin=CovrPrd-ci, ymax=CovrPrd+ci))+
+                 geom_point(shape=21, size=3, fill="white")
+plot1b
 
 
 
-Plot2 <- ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd2", groupvars=c("HomeSizeQaurtiles","HomeValLS")),
-       aes(x=HomeSizeQaurtiles, y=CovrPrd2, colour=HomeValLS, group=HomeValLS)) +
+
+
+Plot2 <- ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd", groupvars=c("HomeSizeQaurtiles","HomeValLS")),
+       aes(x=HomeSizeQaurtiles, y=CovrPrd, colour=HomeValLS, group=HomeValLS)) +
   
-    geom_errorbar(aes(ymin=CovrPrd2-se, ymax=CovrPrd2+se), colour="black", width=.1) +
+    geom_errorbar(aes(ymin=CovrPrd-se, ymax=CovrPrd+se), colour="black", width=.1) +
     geom_line() +
     geom_point( size=3, shape=21, fill="white") + # 21 is filled circle
     xlab("Home Size (Quartiles)") +
@@ -393,7 +401,7 @@ Plot2 <- ggplot(summarySE(ProgramTarpTime, measurevar="CovrPrd2", groupvars=c("H
           legend.position=c(.95,.95))
 Plot2
 
-Plot3<- ggplot(ProgramTarpTime, aes(x = CovrPrd2, y = HomeSizeQaurtiles  )) +
+Plot3<- ggplot(ProgramTarpTime, aes(x = CovrPrd, y = HomeSizeQaurtiles  )) +
         geom_boxplot(size = .5) +
         geom_jitter(alpha = .1) +
         theme(axis.text.x = element_text( hjust = 1, vjust = 1))
@@ -408,16 +416,16 @@ Plot3
 OLS models
 ```{r}
 #Intercept Only
-Reg1 <- lm(CovrPrd2~1, data = ProgramTarpTime)
+Reg1 <- lm(CovrPrd~1, data = ProgramTarpTime)
 
 #Base Reg
-Reg2 <- lm(CovrPrd2~
+Reg2 <- lm(CovrPrd~
           log(FootprintArea)
           +VAPTOTAL
            , data = ProgramTarpTime)
 
 #Property Level Controls
-Reg3 <- lm(CovrPrd2~
+Reg3 <- lm(CovrPrd~
            log(FootprintArea)
            +log(VAPTOTAL)
            +log(X1mSWmphBnd)
@@ -429,7 +437,7 @@ Reg3 <- lm(CovrPrd2~
            , data = ProgramTarpTime)
 
 #Block Group socioeconomic controls
-Reg4 <- lm(CovrPrd2~
+Reg4 <- lm(CovrPrd~
             log(FootprintArea)
            +log(VAPTOTAL)
            +log(X1mSWmphBnd)
@@ -445,7 +453,7 @@ Reg4 <- lm(CovrPrd2~
            , data = ProgramTarpTime)
 
 # Zip Code FE
-Reg5 <- lm(CovrPrd2~
+Reg5 <- lm(CovrPrd~
            log(FootprintArea)
            +log(VAPTOTAL)
            +log(X1mSWmphBnd)
@@ -474,18 +482,18 @@ summary(Reg5)
 In reality response times are not all evenly spaced and are more generalized "bins" that have order from fast to slow. 
 ```{r}
 #Intercept Only
-Reg1b <- clm(as.factor((CovrPrd2/2)-1)~ 1
+Reg1b <- clm(as.factor((CovrPrd/2)-1)~ 1
            , data = ProgramTarpTime)
 
 #Base Reg
-Reg2b <- clm(as.factor((CovrPrd2/2)-1)~
+Reg2b <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
            +log(VAPTOTAL)
            , data = ProgramTarpTime)
 
 
 #Property Level Controls
-Reg3b <- clm(as.factor((CovrPrd2/2)-1)~
+Reg3b <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)
            +log(VAPTOTAL)
            +log(X1mSWmphBnd)
@@ -497,7 +505,7 @@ Reg3b <- clm(as.factor((CovrPrd2/2)-1)~
            , data = ProgramTarpTime)
 
 #Block Group socioeconomic controls
-Reg4b <- clm(as.factor((CovrPrd2/2)-1)~
+Reg4b <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
            +log(VAPTOTAL)
            +log(X1mSWmphBnd)
@@ -513,7 +521,7 @@ Reg4b <- clm(as.factor((CovrPrd2/2)-1)~
            , data = ProgramTarpTime)
 
 # Zip Code FE
-Reg5b <-  clm(as.factor((CovrPrd2/2)-1)~
+Reg5b <-  clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
            +log(VAPTOTAL)
            +log(X1mSWmphBnd)
@@ -566,18 +574,18 @@ brant(test3)
 ### generlized/partial proportional odds (relaxed parallel assumption with intercept specific estimates)
 ```{r}
 #Intercept Only
-Reg1c <- clm(as.factor((CovrPrd2/2)-1)~ 1
+Reg1c <- clm(as.factor((CovrPrd/2)-1)~ 1
            , data = ProgramTarpTime)
 
 #Base Reg
-Reg2c <- clm(as.factor((CovrPrd2/2)-1)~
+Reg2c <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)
            +log(VAPTOTAL)
            , data = ProgramTarpTime)
 
 
 #Property Level Controls
-Reg3c <- clm(as.factor((CovrPrd2/2)-1)~
+Reg3c <- clm(as.factor((CovrPrd/2)-1)~
           log(FootprintArea)
            +log(VAPTOTAL)
            +age+I(age^2)
@@ -590,7 +598,7 @@ Reg3c <- clm(as.factor((CovrPrd2/2)-1)~
             , data = ProgramTarpTime)
 
 #Block Group socioeconomic controls
-Reg4c <- clm(as.factor((CovrPrd2/2)-1)~
+Reg4c <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)
            +log(VAPTOTAL)
            +age+I(age^2)
@@ -606,7 +614,7 @@ Reg4c <- clm(as.factor((CovrPrd2/2)-1)~
             , data = ProgramTarpTime)
 
 # Zip Code FE
-Reg5c <-  clm(as.factor((CovrPrd2/2)-1)~
+Reg5c <-  clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)
            +log(VAPTOTAL)
            +age+I(age^2)
@@ -687,18 +695,18 @@ matchSize_df <- match.data(matchSize)
 matchSize_Control<- matchSize_df%>%
                       filter(SizeTreatLarge==0)
 
-matchSize_Control<- mean(matchSize_Control$CovrPrd2)
+matchSize_Control<- mean(matchSize_Control$CovrPrd)
 
 matchSize_Treat<- matchSize_df%>%
                       filter(SizeTreatLarge==1)
 
-matchSize_Treat<- mean(matchSize_Treat$CovrPrd2)
+matchSize_Treat<- mean(matchSize_Treat$CovrPrd)
 matchSize_Treat-matchSize_Control
 
 
 #Modeled
-matchSize_model1 <- lm(((CovrPrd2/2)-1) ~ SizeTreatLarge,data = matchSize_df, weights = weights)
-matchSize_model2 <- clm(as.factor((CovrPrd2/2)-1) ~ SizeTreatLarge, data = matchSize_df, weights = weights)
+matchSize_model1 <- lm(((CovrPrd/2)-1) ~ SizeTreatLarge,data = matchSize_df, weights = weights)
+matchSize_model2 <- clm(as.factor((CovrPrd/2)-1) ~ SizeTreatLarge, data = matchSize_df, weights = weights)
 
 scale_test(matchSize_model2)
 
@@ -748,16 +756,16 @@ matchVal_df <- match.data(matchVal)
 matchVal_Control<- matchVal_df%>%
                       filter(ValTreatLarge==0)
 
-matchVal_Control<- mean(matchVal_Control$CovrPrd2)
+matchVal_Control<- mean(matchVal_Control$CovrPrd)
 
 matchVal_Treat<- matchVal_df%>%
                       filter(ValTreatLarge==1)
-matchVal_Treat<- mean(matchVal_Treat$CovrPrd2)
+matchVal_Treat<- mean(matchVal_Treat$CovrPrd)
 matchVal_Treat-matchVal_Control
 
 
 #Modeled
-matchVal_model <- clm(as.factor((CovrPrd2/2)-1) ~ ValTreatLarge, data = matchVal_df, weights = weights)
+matchVal_model <- clm(as.factor((CovrPrd/2)-1) ~ ValTreatLarge, data = matchVal_df, weights = weights)
 scale_test(matchVal_model)
 summary(matchVal_model)
 
@@ -769,18 +777,18 @@ summary(matchVal_model)
 Ordered Logit
 ```{r}
 #Intercept Only
-Reg1d <- clm(as.factor((CovrPrd2/2)-1)~ 1
+Reg1d <- clm(as.factor((CovrPrd/2)-1)~ 1
            , data = NProgramTarpTime)
 
 #Base Reg
-Reg2d <- clm(as.factor((CovrPrd2/2)-1)~
+Reg2d <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
            +log(VAPTOTAL)
            , data = NProgramTarpTime)
 
 
 #Property Level Controls
-Reg3d <- clm(as.factor((CovrPrd2/2)-1)~
+Reg3d <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)
            +log(VAPTOTAL)
            +log(X1mSWmphBnd)
@@ -792,7 +800,7 @@ Reg3d <- clm(as.factor((CovrPrd2/2)-1)~
            , data = NProgramTarpTime)
 
 #Block Group socioeconomic controls
-Reg4d <- clm(as.factor((CovrPrd2/2)-1)~
+Reg4d <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
            +log(VAPTOTAL)
            +log(X1mSWmphBnd)
@@ -808,7 +816,7 @@ Reg4d <- clm(as.factor((CovrPrd2/2)-1)~
            , data = NProgramTarpTime)
 
 # Zip Code FE
-Reg5d <-  clm(as.factor((CovrPrd2/2)-1)~
+Reg5d <-  clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
            +log(VAPTOTAL)
            +log(X1mSWmphBnd)
@@ -836,11 +844,11 @@ summary(Reg5d)
 #Combined Results
 ```{r}
 #Intercept Only
-Reg1e <- clm(as.factor((CovrPrd2/2)-1)~ 1
+Reg1e <- clm(as.factor((CovrPrd/2)-1)~ 1
            , data = TarpTime)
 
 #Base Reg
-Reg2e <- clm(as.factor((CovrPrd2/2)-1)~
+Reg2e <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)*Program
            +log(VAPTOTAL)*Program
            
@@ -848,7 +856,7 @@ Reg2e <- clm(as.factor((CovrPrd2/2)-1)~
 
 
 #Property Level Controls
-Reg3e <- clm(as.factor((CovrPrd2/2)-1)~
+Reg3e <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)*Program
            +log(VAPTOTAL)*Program
 
@@ -861,7 +869,7 @@ Reg3e <- clm(as.factor((CovrPrd2/2)-1)~
            , data = TarpTime)
 
 #Block Group socioeconomic controls
-Reg4e <- clm(as.factor((CovrPrd2/2)-1)~
+Reg4e <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)*Program
            +log(VAPTOTAL)*Program
 
@@ -878,7 +886,7 @@ Reg4e <- clm(as.factor((CovrPrd2/2)-1)~
            , data = TarpTime)
 
 # Zip Code FE
-Reg5e <-  clm(as.factor((CovrPrd2/2)-1)~
+Reg5e <-  clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)*Program
            +log(VAPTOTAL)*Program
 
@@ -915,7 +923,7 @@ matchProgram <- matchit(Program ~ FootprintArea
                                     +DistROE
                                     +DistToHwy
                                     +LocalOwner
-                                   # +DSITEZIP
+                                    +DSITEZIP
                                    ,data = TarpTime
                                    ,method = 'cem'
                                    ,k2k = TRUE
@@ -930,11 +938,11 @@ matchProgram_df <- match.data(matchProgram)
 Matched, Ordered Logit
 ```{r}
 #Intercept Only
-Reg1f <- clm(as.factor((CovrPrd2/2)-1)~ 1
+Reg1f <- clm(as.factor((CovrPrd/2)-1)~ 1
            , data = filter(matchProgram_df, Program==0))
 
 #Base Reg
-Reg2f <- clm(as.factor((CovrPrd2/2)-1)~
+Reg2f <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
             +log(VAPTOTAL)
             #+Program
@@ -942,26 +950,26 @@ Reg2f <- clm(as.factor((CovrPrd2/2)-1)~
 
 
 #Property Level Controls
-Reg3f <- clm(as.factor((CovrPrd2/2)-1)~
+Reg3f <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)
            +log(VAPTOTAL)
            #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
            , data = filter(matchProgram_df, Program==0))
 
 #Block Group socioeconomic controls
-Reg4f <- clm(as.factor((CovrPrd2/2)-1)~
+Reg4f <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
            +log(VAPTOTAL)
            #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -972,13 +980,13 @@ Reg4f <- clm(as.factor((CovrPrd2/2)-1)~
            , data = filter(matchProgram_df, Program==0))
 
 # Zip Code FE
-Reg5f <-  clm(as.factor((CovrPrd2/2)-1)~
+Reg5f <-  clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
            +log(VAPTOTAL)
            #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-          # +BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -1002,11 +1010,11 @@ summary(Reg5f)
 Matched, Ordered Logit, interacted
 ```{r}
 #Intercept Only
-Reg1g <- clm(as.factor((CovrPrd2/2)-1)~ 1
+Reg1g <- clm(as.factor((CovrPrd/2)-1)~ 1
            , data = matchProgram_df)
 
 #Base Reg
-Reg2g <- clm(as.factor((CovrPrd2/2)-1)~
+Reg2g <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
            +VAPTOTAL
            +Program
@@ -1014,24 +1022,24 @@ Reg2g <- clm(as.factor((CovrPrd2/2)-1)~
 
 
 #Property Level Controls
-Reg3g <- clm(as.factor((CovrPrd2/2)-1)~
+Reg3g <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)*Program
            +log(VAPTOTAL)*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
            , data = matchProgram_df)
 
 #Block Group socioeconomic controls
-Reg4g <- clm(as.factor((CovrPrd2/2)-1)~
+Reg4g <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)*Program
            +log(VAPTOTAL)*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-          # +BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -1042,13 +1050,12 @@ Reg4g <- clm(as.factor((CovrPrd2/2)-1)~
            , data = matchProgram_df)
 
 # Zip Code FE
-Reg5g <-  clm(as.factor((CovrPrd2/2)-1)~
+Reg5g <-  clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)*Program
            +log(VAPTOTAL)*Program
-           
            +log(X1mSWmphBnd)
            +age+I(age^2)
-          # +BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
