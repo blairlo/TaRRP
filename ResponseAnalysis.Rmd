@@ -39,6 +39,7 @@ library(units)
 library(DescTools)
 library(brant)
 library(MatchIt)
+library(vtable)
 ```
 
 ### Handy summary function for caluclating SE
@@ -313,20 +314,24 @@ TarpTime$BuildingType<-relevel(TarpTime$BuildingType, "SINGLE FAMILY")
 
 #Select only tarped properties and remove outliers
 TarpTime<-TarpTime%>%
-                        filter(!is.na(CovrPrd))%>%
-                        filter(!is.na(LocalOwner))%>%
-                        filter(
+                        dplyr::filter(!is.na(CovrPrd))%>%
+                        dplyr::filter(!is.na(LocalOwner))%>%
+                        dplyr::filter(!is.na(Val_sqf))%>%
+                        dplyr::filter(is.finite(Val_sqf))%>%
+                        dplyr::filter(
                                  BuildingType == "SINGLE FAMILY"
                                 |BuildingType == "MOBILE HOME"
                                 |BuildingType == "MULTI-FAMILY"
-                                |BuildingType == "Other"
-                                &Val_sqf> 0
-                                &Val_sqf<1000
-                                &FootprintArea>0
-                                &FootprintArea<8000
+                               # |BuildingType == "Other"
+                                )%>%
+                                dplyr::filter(
+                                 VAPTOTAL > 100
+                                &VAPTOTAL < 10000000
+                                &FootprintArea > 100
+                                &FootprintArea < 10000
+                                &Val_sqf > 0
+                                &Val_sqf < 400
                                 )
-
-TarpTime<-TarpTime%>%filter(!is.na(Val_sqf))
  
 #Assessed Value quantiles
 TarpTime <- TarpTime%>%
@@ -401,6 +406,36 @@ Plot3<- ggplot(ProgramTarpTime, aes(x = CovrPrd, y = HomeSizeQaurtiles  )) +
         theme(axis.text.x = element_text( hjust = 1, vjust = 1))
 
 Plot3
+
+
+stat1 <- ddply(TarpTime, "Program", summarise, Val.stat1=mean(VAPTOTAL))
+stat1
+
+plot4 <- ggplot(TarpTime, aes(x=VAPTOTAL, fill=as.factor(Program))) +
+    geom_histogram(binwidth=10000, alpha=.5, position="identity")+
+    geom_vline(data=stat1, aes(xintercept=Val.stat1,  colour=as.factor(Program)),linetype="dashed", size=1)+
+    scale_x_continuous(limits = c(0, 300000))
+
+plot4
+
+
+stat2 <- ddply(TarpTime, "Program", summarise, Val.stat2=mean(FootprintArea))
+stat2
+
+plot5 <- ggplot(TarpTime, aes(x=FootprintArea, fill=as.factor(Program))) +
+    geom_histogram(binwidth=100, alpha=.5, position="identity")+
+    geom_vline(data=stat2, aes(xintercept=Val.stat2,  colour=as.factor(Program)),linetype="dashed", size=1)+
+    scale_x_continuous(limits = c(0, 5000))
+
+plot5
+
+#boxplots
+plot6 <-ggplot(TarpTime, aes(x=as.factor(Program), y=Val_sqf, fill=as.factor(Program))) + 
+    geom_boxplot() + 
+    guides(fill=FALSE) + 
+    coord_flip()+
+    scale_y_continuous(limits = c(0, 200))
+plot6
 
 ```
 
@@ -860,7 +895,7 @@ Reg3e <- clm(as.factor((CovrPrd/2)-1)~
            +log(Val_sqf)*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-          # +BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -872,7 +907,7 @@ Reg4e <- clm(as.factor((CovrPrd/2)-1)~
            +log(Val_sqf)*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-          # +BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -888,7 +923,7 @@ Reg5e <-  clm(as.factor((CovrPrd/2)-1)~
            +log(Val_sqf)*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-          # +BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -910,8 +945,11 @@ summary(Reg5e)
 ### Matching For Non-Program Counterfactual
 ```{r}
 #Matched Set     
-matchProgram <- matchit(Program ~   FootprintArea
-                                    +Val_sqf
+matchProgram <- matchit(Program ~ 
+                                    +FootprintArea
+                                    +VAPTOTAL
+                                    S1STORIES
+                                    +S1BATHRMS
                                     +X1mSWmphBnd
                                     +age 
                                     +BuildingType
@@ -924,10 +962,9 @@ matchProgram <- matchit(Program ~   FootprintArea
                                     +smartphoneP
                                     +DSITEZIP
                                    ,data = TarpTime
-                                   ,method = "CEM"
-                                   #,antiexact = TRUE
+                                   ,method = "cem"
                                    ,k2k = TRUE
-                                   #,estimand = 'ATT'
+                                   ,estimand = 'ATT'
                                   )
 
 matchProgram_df <- match.data(matchProgram)
@@ -938,21 +975,15 @@ Matching Summaries
 ```{r}
 summary(matchProgram)
 
-
 matchIndicator <- matchProgram_df %>%
                  dplyr::select(FootprintID)%>%
                  mutate(matched=1)%>%
                  st_drop_geometry()
  
+
 SummaryDat<-TarpTime%>%
           st_drop_geometry()%>%
           left_join(matchIndicator, by="FootprintID")%>% 
-            mutate(status = ( 
-                             ifelse(matched == 1,"Matched", NA)))
-
-
-SummaryDat<-TarpTime%>%
-          st_join(matchIndicator, by=FootprintID, left=TRUE)%>% 
             mutate(status = (ifelse(is.na(matched) & Program == 1,"Unmatched_Program", 
                              ifelse(is.na(matched) & Program == 0,"Unmatched_NonProgram", 
                              ifelse(matched == 1 & Program == 1,"Matched_Program", 
@@ -960,7 +991,7 @@ SummaryDat<-TarpTime%>%
 
 MatchingSummary<- SummaryDat%>%
   dplyr::group_by(status)%>%
-  dplyr::summarize(median(Val_sqf),
+  dplyr::summarize(mean(VAPTOTAL),
                    n())
 
 MatchingSummary
@@ -989,7 +1020,7 @@ DatasummaryP<- ProgramTarpTime%>%
                        )%>%
                         st_drop_geometry()
 
-Val_sqfDatasummaryNP<- NProgramTarpTime%>%
+DatasummaryNP<- NProgramTarpTime%>%
                 dplyr::select(
                        FootprintArea,
                        VAPTOTAL,
@@ -1007,8 +1038,7 @@ Val_sqfDatasummaryNP<- NProgramTarpTime%>%
                        )%>%
                         st_drop_geometry()
 
-
-DatasummaryMP<- ProgramTarpTime%>%
+MatchedDat<- SummaryDat%>%
                 dplyr::select(
                        FootprintArea,
                        VAPTOTAL,
@@ -1022,21 +1052,20 @@ DatasummaryMP<- ProgramTarpTime%>%
                        nonwhiteP,
                        bachelorsP,
                        internetP,
-                       smartphoneP
-                       )%>%
-                        st_drop_geometry()
+                       smartphoneP,
+                       status
+                       )
+
+MatchedDattable<-st(MatchedDat, group = 'status', group.test = FALSE)
 
 
-
-stargazer(DatasummaryP,DatasummaryNP,
+stargazer(DatasummaryP,DatasummaryNP,Unmatched_Program,
                   out = paste(getwd(),"/Summary.html", sep=""),
-                  type = "html" #change to latex for final
+                  type = "html", #change to latex for final
+                  min.max = FALSE,
+                  median = TRUE
                   )
 ```
-
-
-
-
 
 Matched, Ordered Logit
 ```{r}
@@ -1047,18 +1076,18 @@ Reg1f <- clm(as.factor((CovrPrd/2)-1)~ 1
 #Base Reg
 Reg2f <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
-            +log(Val_sqf)
+            +Val_sqf
             #+Program
             ,data = filter(matchProgram_df, Program==0))
 
 #Property Level Controls
 Reg3f <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -1067,12 +1096,12 @@ Reg3f <- clm(as.factor((CovrPrd/2)-1)~
 #Block Group socioeconomic controls
 Reg4f <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-          # +BuildingType
-            +S1STORIES
+           +BuildingType
+           +S1STORIES
            +S1BATHRMS
            +DistROE
            +DistToHwy
@@ -1088,11 +1117,11 @@ Reg4f <- clm(as.factor((CovrPrd/2)-1)~
 # Zip Code FE
 Reg5f <-  clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            #+Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-          # +BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -1121,11 +1150,15 @@ Reg1g <- clm(as.factor((CovrPrd/2)-1)~ 1
            , data = matchProgram_df)
 
 #Base Reg
+Regtest <- clm(as.factor((CovrPrd/2)-1)~
+            Program
+           ,data = matchProgram_df)
+
+#Base Reg
 Reg2g <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)*Program
            +log(Val_sqf)*Program
-          # +Program
-           , data = matchProgram_df)
+           ,data = matchProgram_df)
 
 #Property Level Controls
 Reg3g <- clm(as.factor((CovrPrd/2)-1)~
@@ -1133,7 +1166,7 @@ Reg3g <- clm(as.factor((CovrPrd/2)-1)~
            +log(Val_sqf)*Program 
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -1147,7 +1180,7 @@ Reg4g <- clm(as.factor((CovrPrd/2)-1)~
            +log(Val_sqf)*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -1165,7 +1198,7 @@ Reg5g <-  clm(as.factor((CovrPrd/2)-1)~
            +log(Val_sqf)*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -1177,6 +1210,26 @@ Reg5g <-  clm(as.factor((CovrPrd/2)-1)~
            +smartphoneP
            + DSITEZIP
            , data = matchProgram_df)
+
+# Zip Code FE
+test <-  clm(as.factor((CovrPrd/2)-1)~
+               Program
+          # +log(FootprintArea)
+           +log(Val_sqf)
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +BuildingType
+           +DistROE
+           +DistToHwy
+           +LocalOwner
+           +S1STORIES
+           +S1BATHRMS
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           + DSITEZIP
+           ,data = matchProgram_df)
 
 summary(Reg1g)
 summary(Reg2g)
@@ -1278,8 +1331,6 @@ tableX<-stargazer(Reg4b, Reg5b, Reg4d,Reg5d,Reg4f,Reg5f,Reg4g,Reg5g,
                   out = paste(getwd(),"/RegTableX.html", sep=""),
                   type = "html" #change to latex for final
                   )
-
-
 
 ```
 
