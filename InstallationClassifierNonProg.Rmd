@@ -179,30 +179,49 @@ st_write(NProgram_Predicted_12_4,"Building Data/NProgram_Predicted_12_4.shp")
 
 ```
 
+```{r}
+NProgram_Predicted_10_19<-st_read("Building Data/NProgram_Predicted_10_19.shp")%>%
+  mutate(NPrgPrd = ifelse(TarpPrb > NTrpPrb, 1,0))
+
+NProgram_Predicted_10_31<-st_read("Building Data/NProgram_Predicted_10_31.shp")%>%
+  mutate(NPrgPrd = ifelse(TarpPrb > NTrpPrb, 1,0))
+
+NProgram_Predicted_11_16<-st_read("Building Data/NProgram_Predicted_11_16.shp")%>%
+  mutate(NPrgPrd = ifelse(TarpPrb > NTrpPrb, 1,0))
+
+NProgram_Predicted_11_21<-st_read("Building Data/NProgram_Predicted_11_21.shp")%>%
+  mutate(NPrgPrd = ifelse(TarpPrb > NTrpPrb, 1,0))
+
+NProgram_Predicted_12_4<-st_read("Building Data/NProgram_Predicted_12_4.shp")%>%
+  mutate(NPrgPrd = ifelse(TarpPrb > NTrpPrb, 1,0))
+
+
+
+```
+
+
+
 ### Create Installation index based on prediction week
 ```{r}
-Install_Predicted <- cbind (st_read("Building Data/Program_Predicted_10_19.shp")%>%
-                                        mutate(TarpP1 = PrgrmPrd)%>%
+NInstall_Predicted <- cbind (NProgram_Predicted_10_19%>%
+                                        mutate(TarpP1 = NPrgPrd)%>%
                                         select(GlblIDF,TarpP1),
-                            st_read("Building Data/Program_Predicted_10_31.shp")%>%
-                                        mutate(TarpP2 = PrgrmPrd)%>%
+                            NProgram_Predicted_10_31%>%
+                                        mutate(TarpP2 = NPrgPrd)%>%
                                         select(TarpP2),
-                            st_read("Building Data/Program_Predicted_11_16.shp")%>%
-                                        mutate(TarpP3 = PrgrmPrd)%>%
+                            NProgram_Predicted_11_16%>%
+                                        mutate(TarpP3 = NPrgPrd)%>%
                                         select(TarpP3),
-                            st_read("Building Data/Program_Predicted_11_21.shp")%>%
-                                        mutate(TarpP4 = PrgrmPrd)%>%
+                            NProgram_Predicted_11_21%>%
+                                        mutate(TarpP4 = NPrgPrd)%>%
                                         select(TarpP4),
-                            st_read("Building Data/Program_Predicted_12_4.shp")%>%
-                                        mutate(TarpP5 = PrgrmPrd)%>%
-                                        select(TarpP5),
-                            st_read("Building Data/Program_Predicted_1_10.shp")%>%
-                                        mutate(TarpP6 = PrgrmPrd)%>%
-                                        select(TarpP6)
+                            NProgram_Predicted_12_4%>%
+                                        mutate(TarpP5 = NPrgPrd)%>%
+                                        select(TarpP5)
                             ) %>%
-                              select(-geometry.1,-geometry.2,-geometry.3,-geometry.4,-geometry.5)
+                              select(-geometry.1,-geometry.2,-geometry.3,-geometry.4)
 
-Install_Predicted<-Install_Predicted%>%
+NInstall_Predicted<-NInstall_Predicted%>%
                         mutate(CovrPrd = 
   ifelse(TarpP1 == "1",  2,
   ifelse(TarpP1 == "0" & TarpP2 =="1",4,
@@ -211,9 +230,9 @@ Install_Predicted<-Install_Predicted%>%
   ifelse(TarpP1 == "0" & TarpP2 =="0" & TarpP3 =="0" & TarpP4 =="0" & TarpP5 =="1",10,                            
   NA)))))) # note that we are not concerned with P6 since its out of program range. These have all been confirmed program properties in January.
 
-table(Install_Predicted$CovrPrd)
+table(NInstall_Predicted$CovrPrd)
 
-st_write(Install_Predicted, "Building Data/Install_Predicted.shp")
+st_write(NInstall_Predicted, "Building Data/NInstall_Predicted.shp")
 ```
 
 
