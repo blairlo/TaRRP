@@ -947,19 +947,19 @@ summary(Reg5e)
 #Matched Set     
 matchProgram <- matchit(Program ~ 
                                     +FootprintArea
-                                    +VAPTOTAL
-                                    S1STORIES
-                                    +S1BATHRMS
+                                    +Val_sqf
+                                   # +S1STORIES
+                                   # +S1BATHRMS
                                     +X1mSWmphBnd
                                     +age 
                                     +BuildingType
                                     +DistROE
                                     +DistToHwy
                                     +LocalOwner
-                                    +nonwhiteP
-                                    +bachelorsP
-                                    +internetP
-                                    +smartphoneP
+                                   # +nonwhiteP
+                                   # +bachelorsP
+                                   # +internetP
+                                   # +smartphoneP
                                     +DSITEZIP
                                    ,data = TarpTime
                                    ,method = "cem"
