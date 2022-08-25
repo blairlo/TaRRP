@@ -40,6 +40,7 @@ library(DescTools)
 library(brant)
 library(MatchIt)
 library(vtable)
+library(ggeffects)
 ```
 
 ### Handy summary function for caluclating SE
@@ -296,7 +297,7 @@ TarpTimeUnfilter$DSITEZIP<-as.factor(TarpTimeUnfilter$DSITEZIP)
 ```{r}
 #make new vars
 TarpTime <- TarpTimeUnfilter%>%
-                          mutate(Val_sqf = VAPBLDG/S1AREATTL,
+                          mutate(Val_sqf = VAPTOTAL/S1AREATTL,
                                  Val_sqf_med = ifelse(Val_sqf < median(Val_sqf), "BelowMedVal","AboveMeanVal"),
                                  sqft_stories = S1AREATTL/(ifelse(S1STORIES == 0, 1,S1STORIES)),
                                  age = (2019-S1YRBLTACT),
@@ -330,7 +331,7 @@ TarpTime<-TarpTime%>%
                                 &FootprintArea > 100
                                 &FootprintArea < 10000
                                 &Val_sqf > 0
-                                &Val_sqf < 400
+                                &Val_sqf < 500
                                 )
  
 #Assessed Value quantiles
@@ -408,18 +409,18 @@ Plot3<- ggplot(ProgramTarpTime, aes(x = CovrPrd, y = HomeSizeQaurtiles  )) +
 Plot3
 
 
-stat1 <- ddply(TarpTime, "Program", summarise, Val.stat1=mean(VAPTOTAL))
+stat1 <- ddply(TarpTime, "Program", summarise, Val.stat1=mean(Val_sqf))
 stat1
 
-plot4 <- ggplot(TarpTime, aes(x=VAPTOTAL, fill=as.factor(Program))) +
-    geom_histogram(binwidth=10000, alpha=.5, position="identity")+
+plot4 <- ggplot(TarpTime, aes(x=Val_sqf, fill=as.factor(Program))) +
+    geom_histogram(binwidth=1, alpha=.5, position="identity")+
     geom_vline(data=stat1, aes(xintercept=Val.stat1,  colour=as.factor(Program)),linetype="dashed", size=1)+
-    scale_x_continuous(limits = c(0, 300000))
+    scale_x_continuous(limits = c(0, 150))
 
 plot4
 
 
-stat2 <- ddply(TarpTime, "Program", summarise, Val.stat2=mean(FootprintArea))
+stat2 <- ddply(TarpTime, "Program", summarise, Val.stat2=median(FootprintArea))
 stat2
 
 plot5 <- ggplot(TarpTime, aes(x=FootprintArea, fill=as.factor(Program))) +
@@ -516,17 +517,17 @@ Reg1b <- clm(as.factor((CovrPrd/2)-1)~ 1
 #Base Reg
 Reg2b <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            , data = ProgramTarpTime)
 
 
 #Property Level Controls
 Reg3b <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -537,10 +538,10 @@ Reg3b <- clm(as.factor((CovrPrd/2)-1)~
 #Block Group socioeconomic controls
 Program <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -555,10 +556,10 @@ Program <- clm(as.factor((CovrPrd/2)-1)~
 # Zip Code FE
 ProgramFE <-  clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -812,17 +813,17 @@ Reg1d <- clm(as.factor((CovrPrd/2)-1)~ 1
 #Base Reg
 Reg2d <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            , data = NProgramTarpTime)
 
 
 #Property Level Controls
 Reg3d <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -833,10 +834,10 @@ Reg3d <- clm(as.factor((CovrPrd/2)-1)~
 #Block Group socioeconomic controls
 NonProgram <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -851,10 +852,10 @@ NonProgram <- clm(as.factor((CovrPrd/2)-1)~
 # Zip Code FE
 NonProgramFE <-  clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)
-           +log(Val_sqf)
+           +Val_sqf
            +log(X1mSWmphBnd)
            +age+I(age^2)
-           #+BuildingType
+           +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
@@ -886,31 +887,35 @@ Reg1e <- clm(as.factor((CovrPrd/2)-1)~ 1
 #Base Reg
 Reg2e <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)*Program
-           +log(Val_sqf)*Program
+           +Val_sqf*Program
            , data = TarpTime)
 
 #Property Level Controls
 Reg3e <- clm(as.factor((CovrPrd/2)-1)~
            log(FootprintArea)*Program
-           +log(Val_sqf)*Program
+           +Val_sqf*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
+           +S1STORIES
+           +S1BATHRMS
            , data = TarpTime)
 
 #Block Group socioeconomic controls
 Reg4e <- clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)*Program
-           +log(Val_sqf)*Program
+           +Val_sqf*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
+           +S1STORIES
+           +S1BATHRMS
            +nonwhiteP
            +bachelorsP
            +internetP
@@ -920,13 +925,15 @@ Reg4e <- clm(as.factor((CovrPrd/2)-1)~
 # Zip Code FE
 Reg5e <-  clm(as.factor((CovrPrd/2)-1)~
             log(FootprintArea)*Program
-           +log(Val_sqf)*Program
+           +Val_sqf*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +BuildingType
            +DistROE
            +DistToHwy
            +LocalOwner
+           +S1STORIES
+           +S1BATHRMS
            +nonwhiteP
            +bachelorsP
            +internetP
@@ -948,21 +955,21 @@ summary(Reg5e)
 matchProgram <- matchit(Program ~ 
                                     +FootprintArea
                                     +Val_sqf
-                                   # +S1STORIES
-                                   # +S1BATHRMS
+                                    +S1STORIES
+                                    +S1BATHRMS
                                     +X1mSWmphBnd
                                     +age 
                                     +BuildingType
                                     +DistROE
                                     +DistToHwy
                                     +LocalOwner
-                                   # +nonwhiteP
-                                   # +bachelorsP
-                                   # +internetP
-                                   # +smartphoneP
+                                    +nonwhiteP
+                                    +bachelorsP
+                                    +internetP
+                                    +smartphoneP
                                     +DSITEZIP
                                    ,data = TarpTime
-                                   ,method = "cem"
+                                   ,method = "nearest"
                                    ,k2k = TRUE
                                    ,estimand = 'ATT'
                                   )
@@ -1192,8 +1199,10 @@ Reg4g <- clm(as.factor((CovrPrd/2)-1)~
            +smartphoneP
            , data = matchProgram_df)
 
+matchProgram_df$CovrPrd<-as.factor(matchProgram_df$CovrPrd)
+
 # Zip Code FE
-Reg5g <-  clm(as.factor((CovrPrd/2)-1)~
+Reg5g <-  clm(CovrPrd~
             log(FootprintArea)*Program
            +log(Val_sqf)*Program
            +log(X1mSWmphBnd)
@@ -1236,6 +1245,8 @@ summary(Reg2g)
 summary(Reg3g)
 summary(Reg4g)
 summary(Reg5g)
+test<-ggpredict(Reg5g, c("FootprintArea [all]", "Program"))
+plot(test)
 
 ```
 
