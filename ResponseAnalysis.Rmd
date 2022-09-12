@@ -41,6 +41,7 @@ library(brant)
 library(MatchIt)
 library(vtable)
 library(ggeffects)
+library(effects)
 ```
 
 ### Handy summary function for caluclating SE
@@ -1168,7 +1169,7 @@ Reg2g <- clm(as.factor((CovrPrd/2)-1)~
            ,data = matchProgram_df)
 
 #Property Level Controls
-Reg3g <- clm(as.factor((CovrPrd/2)-1)~
+Reg3g <- clm(CovrPrd~
            log(FootprintArea)*Program
            +log(Val_sqf)*Program 
            +log(X1mSWmphBnd)
@@ -1245,8 +1246,10 @@ summary(Reg2g)
 summary(Reg3g)
 summary(Reg4g)
 summary(Reg5g)
-test<-ggpredict(Reg5g, c("FootprintArea [all]", "Program"))
+test<-ggpredict(Reg3g, c("FootprintArea [all]", "Program"))
 plot(test)
+
+
 
 ```
 
