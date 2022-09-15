@@ -622,7 +622,7 @@ Type2Error<-tm_shape(ProgramPredictedEvaluated%>%
 
 ### Fishnet Hotspot analysis
 ```{r, fig.height = 6.5, fig.width = 20}
-fishnet<- st_make_grid(ProgramPredictedEvaluated, cellsize = 2640, what = "polygons")%>%
+fishnet<- st_make_grid(ProgramPredictedEvaluated, cellsize = 1320, what = "polygons")%>%
     st_as_sf() %>%
    rename(geometry = x) %>%
     mutate(fishnet_id = 1:n())
@@ -687,7 +687,11 @@ FishnetStatsplot4<-  tm_shape(fishnetStats)+
 
 #tmap_arrange(FishnetStatsplot1, FishnetStatsplot2, FishnetStatsplot3,FishnetStatsplot4, ncol=4)
 
-#FishnetStatsplot2
+tmap_arrange(FishnetStatsplot1, FishnetStatsplot2, FishnetStatsplot4, ncol=3)
+
+FishnetStatsplot1
+FishnetStatsplot2
+FishnetStatsplot4
 
 ```
 
@@ -696,26 +700,32 @@ FishnetStatsplot4<-  tm_shape(fishnetStats)+
 library(spatstat)
 library(stars)
 
+#Based on https://mgimond.github.io/Spatial/point-pattern-analysis-in-r.html / 
+
 
 #Meaure and Plot Error Density
-PointCluster1<-st_centroid(ProgramPredictedEvaluated %>% filter(Type2Error == 1 |Type1Error == 1 ))
+PointCluster1<-st_centroid(ProgramPredictedEvaluated %>% filter(
+                                                               # Type1Error == 1|
+                                                               Type2Error == 1 
+                                                                ))
 
 PointCluster1.ppp <- as.ppp(st_geometry(PointCluster1))
 marks(PointCluster1.ppp)  <- NULL
-PointCluster1.km <- rescale(PointCluster1.ppp, 1000, "km")
+PointCluster1.km <- rescale(PointCluster1.ppp, 3280.84, "km")
 
 ann.p <- mean(nndist(PointCluster1.km, k=1))
 ann.p
 
 #Measure and Plot Counterfactual Density 
-DensityRaster <- st_rasterize(fishnetStats %>% select(PrgrmPrdN, geometry))
+fishnetStats0 <- fishnetStats %>% replace(is.na(.), 0)
+DensityRaster <- st_rasterize(fishnetStats0 %>% select(ProgPerCap, geometry))
 DensityRaster.im <- as.im(DensityRaster)
-DensityRaster.km <- rescale(DensityRaster.im, 1000, "km")
+DensityRaster.km <- rescale(DensityRaster.im, 3280.84, "km")
 
 n     <- 5000L
 ann.r <- vector(length=n)
 for (i in 1:n){
-  rand.p   <- rpoint(n=PointCluster1.km$n, f=DensityRaster.km) #simulate the same number of random points as the counter factual weighted by population density
+  rand.p   <- rpoint(n=PointCluster1.km$n, f=DensityRaster.km) #simulate the same number of random points as the counterfactual weighted by population density
   ann.r[i] <- mean(nndist(rand.p, k=1))
 }
 
@@ -727,8 +737,28 @@ plot(rand.p, main="Simulated Null" )
 ann.counterfactual <- mean(nndist(rand.p))
 ann.counterfactual
 
-hist(ann.r, main=NULL, las=1, breaks=40, col="bisque", xlim=range(ann.p, ann.r))
+hist(ann.r, main=NULL, las=1, breaks=40, col="bisque", xlim=range(ann.p, ann.r), xlab = "Average Nearest Neighbor Distance (km)")
 abline(v=ann.p, col="blue")
+text(v, max(x), "label", pos = 2, srt = 90)
+
+
+
+ann.rDF<-as.data.frame(ann.r)
+
+ggplot(ann.rDF, aes(x=ann.r)) + 
+  geom_histogram(color="black", fill="white")+
+  geom_vline(aes(xintercept=ann.p),color="blue", linetype="dashed", size=1)+
+  annotate("text", x=ann.p-.004, y=450, label="Type 2 Error", angle=90, size=4, color="blue")+
+  xlab("Average Nearest Neighbor(km)") + 
+  ylab("Frequency")
+  
+
+
+
+
+
+
+
 
 N.greater <- sum(ann.r > ann.p)
 p <- min(N.greater + 1, n + 1 - N.greater) / (n +1)
@@ -795,7 +825,7 @@ ProgramPredictedEvaluatedVars <- ProgramPredictedEvaluated%>%
                     st_join(Parcels, left = TRUE) %>% #append parcel attribute to footprint Point
                     st_join(MichaelWind, left = TRUE) %>%
                     st_join(BGstats, left = TRUE) %>%
-                    st_join(Tractstats) %>%
+                    #st_join(Tractstats) %>%
                     dplyr::rename(FootprintID=GlblIDF, ParcelID=GlobalID)
 
 
@@ -805,9 +835,11 @@ test for corrilations
 ```{r}
 
 ErrorCor <- lm(Type2Error~
-          S1AREATTL
+            S1AREATTL
            +VAPTOTAL
            +X1mSWmphBnd
+           +S1STORIES
+           +S1BATHRMS
            +S1YRBLTACT
            +nonwhiteP
            +bachelorsP
@@ -829,5 +861,9 @@ st_write(ProgramPredictedEvaluated %>%
 
 ```
 
+
+```{r}
+
+```
 
 
