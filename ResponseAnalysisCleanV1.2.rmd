@@ -1,0 +1,1070 @@
+---
+title: "BayWeeklyAnalysis"
+author: "Logan"
+date: "5/31/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Descriptive Statistics
+
+# Prelims
+```{r}
+library(sf)
+library(raster)
+library(stringr)
+library(questionr)
+library(plyr)
+library(dplyr)
+library(rgdal)
+library(rgeos)
+library(ggplot2)
+library(MASS)
+library(pscl)
+library(reshape2)
+library(data.table)
+require(caTools)
+library(tidycensus)
+library(stargazer)
+library(texreg)
+library(exactextractr)
+library(ordinal)
+library(estimatr)
+library(osmextract)
+library(ggeffects)
+library(VGAM)
+library(car)
+library(units)
+library(DescTools)
+library(brant)
+library(MatchIt)
+library(vtable)
+library(ggeffects)
+library(effects)
+library(extraDistr)
+library(spatstat)
+library(xtable)
+library(gridExtra)
+```
+
+### Handy summary function for caluclating SE
+```{r}
+## form the R cookbook http://www.cookbook-r.com/Manipulating_data/Summarizing_data/
+## Gives count, mean, standard deviation, standard error of the mean, and confidence interval (default 95%).
+##   data: a data frame.
+##   measurevar: the name of a column that contains the variable to be summarized
+##   groupvars: a vector containing names of columns that contain grouping variables
+##   na.rm: a boolean that indicates whether to ignore NA's
+##   conf.interval: the percent range of the confidence interval (default is 95%)
+summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
+                      conf.interval=.95, .drop=TRUE) {
+    #library(plyr)
+
+    # New version of length which can handle NA's: if na.rm==T, don't count them
+    length2 <- function (x, na.rm=FALSE) {
+        if (na.rm) sum(!is.na(x))
+        else       length(x)
+    }
+
+    # This does the summary. For each group's data frame, return a vector with
+    # N, mean, and sd
+    datac <- ddply(data, groupvars, .drop=.drop,
+      .fun = function(xx, col) {
+        c(N    = length2(xx[[col]], na.rm=na.rm),
+          mean = mean   (xx[[col]], na.rm=na.rm),
+          sd   = sd     (xx[[col]], na.rm=na.rm)
+        )
+      },
+      measurevar
+    )
+
+    # Rename the "mean" column    
+    datac <- rename(datac, c("mean" = measurevar))
+
+    datac$se <- datac$sd / sqrt(datac$N)  # Calculate standard error of the mean
+
+    # Confidence interval multiplier for standard error
+    # Calculate t-statistic for confidence interval: 
+    # e.g., if conf.interval is .95, use .975 (above/below), and use df=N-1
+    ciMult <- qt(conf.interval/2 + .5, datac$N-1)
+    datac$ci <- datac$se * ciMult
+
+    return(datac)
+}
+```
+
+
+# Data
+
+### Downloaded shapefiles and measurments
+```{r}
+ProjectCRS = 2882 #Make project coordinate system
+
+NInstall_Predicted<-st_read("Building Data/NInstall_Predicted.shp")%>%
+                              st_transform(ProjectCRS) %>% #pull in time series
+                              mutate(Program = 0)
+
+Install_Predicted<-st_read("Building Data/Install_Predicted.shp")%>%
+                              st_transform(ProjectCRS)%>% #pull in time series
+                              dplyr::select(-TarpP6)%>%
+                              mutate(Program = 1)
+
+CInstall_Predicted<-rbind(NInstall_Predicted,Install_Predicted)
+
+
+CInstall_Predicted$FootprintArea <- st_area(CInstall_Predicted)
+CInstall_Predicted$FootprintArea<-drop_units(CInstall_Predicted$FootprintArea)
+
+Parcels<-st_read("Building Data/Parcels.shp")%>%
+                              st_transform(ProjectCRS)
+                                  
+BayCounty<-st_read("OtherGeoData/Bay_County.shp")%>%
+                              st_transform(ProjectCRS)
+
+MichaelWind<- st_read("OtherGeoData/Michael_ATL_2018_1minMaxSus_OT_FtptSwath_BandedShp_12Oct_0600UTC_v1_Hwind_A.shp")%>%
+                    st_transform(ProjectCRS)
+
+#load and convert sign up locations to points
+ROELocation<- read.csv("Building Data/ROECenters.csv")%>%
+                st_as_sf(coords = c("Longitude", "Latitude"), crs = 4269)%>%
+                  st_transform(crs = ProjectCRS)
+
+
+CityCenter<- data.frame (   "CityCenter" = c("CityCenter"),
+                           "Longitude" = c("-85.65468724561529"),
+                           "Latitude" = c("30.16190048119832"))%>%
+             st_as_sf(coords = c("Longitude", "Latitude"), crs = 4269)%>%
+             st_transform(crs = ProjectCRS)
+
+
+  
+```
+
+### Census areas and stats
+```{r}
+census_api_key("11f26f3fa4866e02a16340fa7037d3811ded2275")
+
+ACSCodebook <- load_variables(2017, "acs5", cache = TRUE)
+#View(ACSCodebook)
+
+BGstats <- get_acs( #download blocks/blockgroup/tracts from Census API
+                        state = "FL", # designate state
+                        geography = "block group", # neighborhood level
+                        variables = c("population" = "B01001_001",
+                                      "households" = "B11001_001",
+                                      "income" = "B19013_001", #household income
+                                      "white" = "B02001_002",
+                                      "bachelors" = "B15003_022",
+                                      "vehicles" = "B992512_002",
+                                      "internet" = "B28002_002",
+                                      "smartphone" = "B28001_005"), #Return population (must pick at least 1 var to run)
+                        output = "wide",
+                        year = 2017,
+                        survey = "acs5",
+                        geometry = TRUE
+                        )%>%
+                          
+                      #make BG level percentages (per capita or per household if measured at the household level)
+                      mutate("whiteP" = whiteE/populationE,
+                             "nonwhiteP" = 1 - whiteP,
+                             "bachelorsP" = bachelorsE/populationE,
+                             "vehiclesP" = vehiclesE/populationE,
+                             "internetP" = internetE/householdsE,
+                             "smartphoneP" = whiteE/householdsE)%>%
+                      dplyr::rename(BG_GEOID = GEOID)%>%
+                      st_transform(ProjectCRS)%>% # reproject
+                      st_crop(BayCounty) #clip to study area
+
+```
+
+### OSM Neighborhood features
+Acquiring distances between properties and n neighborhood attributes is laborious depending on the availability of spatialized data at the county/state/US level from many sources (e.g. local GIS websites, US DOT).
+
+One solution is to use Open Street Map, which is an open source mapping application hosted by University
+College London, similar to google maps and on a global scale, but with the main difference being we can
+download it feature by feature.
+
+**Download OSM features as sf object for state**
+I use the osmextract package (https://github.com/ropensci/osmextract) as opposed to the more popular
+osmdata package because of its ability to download entire states worth of data quickly without timeout
+problems. There were also some discrepancies in the osmdata package downloads we could not reconcile
+with online maps. This does not seem to be an issue with osmextract.
+```{r}
+
+run = "N"
+
+if (run=="Y") {
+
+#set Geography
+OSMRegion ="US-FL"
+County= "BAY"
+
+
+#Download all OSM polygons for FL
+osm_poly<- oe_get(OSMRegion,
+layer = "multipolygons",
+stringsAsFactors = FALSE,
+quiet = TRUE)
+
+osm_poly<-st_transform(osm_poly, crs = ProjectCRS) #reproject
+osm_poly<-st_make_valid(osm_poly) #fixes "dangles" and other hand drawing issues
+osm_poly<-st_crop(osm_poly,BayCounty)# reduce data to neighborhood level
+
+
+#Download all OSM points for FL
+osm_points<- oe_get(OSMRegion,
+layer = "points",
+stringsAsFactors = FALSE,
+quiet = TRUE)
+osm_points<-st_transform(osm_points, crs = ProjectCRS) #reproject
+osm_points<-st_make_valid(osm_points) #fixes "dangles" and other hand drawing issues
+osm_points<-st_crop(osm_points,BayCounty)# reduce data to neighborhood level
+
+
+#Download all OSM polylines for FL
+osm_line<- oe_get(OSMRegion,
+layer = "lines",
+stringsAsFactors = FALSE,
+quiet = TRUE)
+
+osm_line<-st_transform(osm_line, crs = ProjectCRS)
+osm_line<-st_make_valid(osm_line)
+osm_line<-st_crop(osm_line,BayCounty)
+
+st_write(osm_poly, "OtherGeoData/osm_poly_Bay.shp")
+st_write(osm_points, "OtherGeoData/osm_points_Bay.shp")
+st_write(osm_line, "OtherGeoData/osm_line_Bay.shp")
+
+
+} else {
+  
+  #osm_poly <-st_read("OtherGeoData/osm_poly_Bay.shp")
+  #osm_points <-st_read("OtherGeoData/osm_points_Bay.shp")
+  osm_line <- st_read("OtherGeoData/osm_line_Bay.shp")
+}
+
+```
+
+#Make Full Data Set
+```{r}
+#spatial joins
+TarpTimeUnfilter <- CInstall_Predicted%>%
+                    #st_centroid() %>% #make footprint points
+                    st_join(Parcels, left = TRUE, largest=TRUE) %>% #append parcel attribute to footprint containing the most of its area
+                    st_join(MichaelWind, left = TRUE, largest=TRUE) %>%
+                    st_join(BGstats, left = TRUE, largest=TRUE) %>%
+                    dplyr::rename(FootprintID=GlblIDF, ParcelID=GlobalID) #make different id names for footprints and parcels
+                
+
+#The following block contains a user defined function that determines the distance from X to Feature Y in Var Y in Layer Y 
+DistToNear<- function(LayerX, LayerY, VarY, FeatureY){ #4 arguments
+      extract<-subset(LayerY, VarY==print(FeatureY)) #choose feature to measure to
+      nearest<-st_nearest_feature(LayerX,extract) #make a list of nearest features
+      dist<-st_distance(LayerX, extract[nearest,], by_element = TRUE) #return the distance
+      attributesY<-st_drop_geometry(extract[nearest,]) #Collect attributes
+      out<-as.data.frame(st_drop_geometry(cbind(LayerX[1],nearest,dist,attributesY))) #combine
+}
+
+# Run function to determine dist to nearest ROE signup, City Center, OSM neighborhood features, and nearest neighbor
+ROEDist<-DistToNear(LayerX = TarpTimeUnfilter,
+                 LayerY = ROELocation,
+                 VarY = ROELocation$ROESite,
+                 FeatureY = "1"
+                ) #ROE distance
+ROEDist$dist <- drop_units(ROEDist$dist)
+
+
+CityCentDist<-DistToNear(LayerX = TarpTimeUnfilter,
+                 LayerY = CityCenter,
+                 VarY = CityCenter$CityCenter,
+                 FeatureY = "CityCenter"
+                )# City Center Distance
+
+InterstateDis<-DistToNear(LayerX = TarpTimeUnfilter,
+                 LayerY = osm_line,
+                 VarY = osm_line$highway,
+                 FeatureY = "trunk"
+                )#Interstate Distance
+
+HighwayDist<-DistToNear(LayerX = TarpTimeUnfilter,
+                 LayerY = osm_line,
+                 VarY = osm_line$highway,
+                 FeatureY = "primary"
+                ) # Highway distance
+
+
+TarpTimeUnfilter <- TarpTimeUnfilter%>%
+                              #join Signup Center Distance
+                              left_join(ROEDist, by = "FootprintID")%>%
+                                dplyr::rename(DistROE = dist)%>%
+
+                              #Join Road Distances
+                              left_join(InterstateDis, by = "FootprintID")%>%
+                                dplyr::rename(DistInterstate = dist)%>%
+  
+                              left_join(HighwayDist, by = "FootprintID")%>%
+                                dplyr::rename(DistHighway = dist)%>%
+                              
+                              #Join Dist to City Center
+                              left_join(CityCentDist, by = "FootprintID")%>%
+                                dplyr::rename(DistCity = dist)%>%
+  
+                                    #report closest distance between the two hwy types
+                                    mutate(DistToHwy = ifelse(DistInterstate < DistHighway ,DistInterstate,DistHighway ))
+
+
+#append a nearest neigbor distance
+NNDist<- TarpTimeUnfilter%>%
+      st_centroid()%>%
+      as.ppp()%>% #Make simple property points
+      nndist(k=c(1:10))#calculate nearest neighbor distances
+
+NNDist<-as.data.frame(NNDist)%>%
+        mutate(NN = (dist.1+
+                       dist.2+
+                       dist.3+
+                       dist.4+
+                       dist.5
+                       /5))#Make Average inverse distance of the first 5 neighbors
+
+TarpTimeUnfilter<-cbind(TarpTimeUnfilter,NNDist$NN)
+```
+
+### Clean data, make transformations, and a matched set
+```{r}
+#make new vars
+TarpTime <- TarpTimeUnfilter%>%
+                          mutate(Val_sqf = VAPBLDG/S1AREATTL,
+                                 Val_sqf_med = ifelse(Val_sqf < median(Val_sqf), "BelowMedVal","AboveMeanVal"),
+                                 sqft_stories = S1AREATTL/(ifelse(S1STORIES == 0, 1,S1STORIES)),
+                                 age = (2019-S1YRBLTACT),
+                                 LocalOwner = ifelse(A7MAILST == "FL", 1, 0),
+                                 
+                                 #make simpler building FE
+                                 BuildingType = as.factor(ifelse(DORAPPDESC == "SINGLE FAMILY", "SINGLE FAMILY",
+                                 ifelse(DORAPPDESC == "MULTI-FAMILY 10 LESS","MULTI-FAMILY",
+                                 #ifelse(DORAPPDESC =="MULTI-FAMILY 10+ UTS","MULTI-FAMILY",
+                                 ifelse(DORAPPDESC == "MOBILE HOME", "MOBILE HOME", "Other")))),
+                                 )
+
+#make single family base category                                 
+TarpTime$BuildingType<-relevel(TarpTime$BuildingType, "SINGLE FAMILY")
+
+#Select only tarped properties and remove outliers
+TarpTime<-TarpTime%>%
+                        dplyr::filter(!is.na(CovrPrd))%>%
+                        dplyr::filter(!is.na(LocalOwner))%>%
+                        dplyr::filter(!is.na(Val_sqf))%>%
+                        dplyr::filter(is.finite(Val_sqf))%>%
+                        dplyr::filter(
+                                 BuildingType == "SINGLE FAMILY"
+                                |BuildingType == "MOBILE HOME"
+                                |BuildingType == "MULTI-FAMILY"
+                                #|BuildingType == "Other"
+                                )%>%
+                                dplyr::filter(
+                                 VAPTOTAL > 1000
+                                &VAPTOTAL < 5000000
+                                &FootprintArea > 100
+                                &FootprintArea < 9000
+                                )
+ 
+#Assessed Value quantiles
+TarpTime <- TarpTime%>%
+                          mutate(AssessValQaurtiles = 
+                            ifelse(CutQ(Val_sqf) == "Q1","Q1AssessVal",
+                            ifelse(CutQ(Val_sqf) == "Q2","Q2AssessVal",
+                            ifelse(CutQ(Val_sqf) == "Q3","Q3AssessVal",
+                            ifelse(CutQ(Val_sqf) == "Q4","Q4AssessVal",NA)))))
+
+#Size quantiles
+TarpTime <- TarpTime%>%
+                          mutate(HomeSizeQaurtiles = 
+                            ifelse(CutQ(FootprintArea) == "Q1","Q1(small)",
+                            ifelse(CutQ(FootprintArea) == "Q2","Q2(medium)",
+                            ifelse(CutQ(FootprintArea) == "Q3","Q3(large)",
+                            ifelse(CutQ(FootprintArea) == "Q4","Q4(very large)",NA)))))
+#Val quantiles
+TarpTime <- TarpTime%>%
+                          mutate(HomeValLS = 
+                            ifelse(AssessValQaurtiles == "Q1AssessVal","BelowMeanVal",
+                            ifelse(AssessValQaurtiles == "Q2AssessVal","BelowMeanVal",
+                            ifelse(AssessValQaurtiles == "Q3AssessVal","AboveMeanVal",
+                            ifelse(AssessValQaurtiles == "Q4AssessVal","AboveMeanVal"
+                           ,NA)))))
+
+TarpTime<- as.data.frame(st_drop_geometry(TarpTime))
+
+#Condense Observation windows?
+TarpTime <- TarpTime%>%
+                    mutate(CovrPrd = (CovrPrd/2)-1)
+
+#make factors and Logged Vars
+TarpTime<-TarpTime%>%
+            mutate(
+                   LFootprintArea =  log(FootprintArea),
+                   LVAPTOTAL = log(VAPTOTAL),
+                   Program = as.factor(Program),
+                   LX1mSWmphBnd = log(X1mSWmphBnd),
+                   DSITEZIP = as.factor(DSITEZIP),
+                   InvDistROE = (1/DistROE),
+                   InvDistCity = (1/DistCity),
+                   InvNNDist = (1/NNDist.NN)
+                   )
+
+ProgTarpTime<-filter(TarpTime, Program==1)
+
+#calc propensity    
+m_ps    <- glm(Program ~ 
+                                    +FootprintArea
+                                    +Val_sqf
+                                    +VAPTOTAL
+                                    +S1STORIES
+                                    +S1BATHRMS
+                                    +X1mSWmphBnd
+                                    +age 
+                                    +BuildingType
+                                    +DistROE
+                                    +DistCity
+                                    +LocalOwner
+                                    +nonwhiteP
+                                    +bachelorsP
+                                    +internetP
+                                    +smartphoneP
+                                    +DSITEZIP
+                                   ,data = TarpTime
+                                   ,family = binomial()
+                                  )
+
+prs_df <- data.frame(pr_score = predict(m_ps, type = "response"),
+                     TarpTime)
+
+prTrimmed_df<-prs_df%>% filter(pr_score >= 0.1 & pr_score <= 0.9)
+
+
+
+#Matched Set     
+matchProgram <- matchit(Program ~ 
+                                    +FootprintArea
+                                    +Val_sqf
+                                    +VAPTOTAL
+                                    +S1STORIES
+                                    +S1BATHRMS
+                                    +X1mSWmphBnd
+                                    +age 
+                                    +BuildingType
+                                    +DistROE
+                                    +DistCity
+                                    +LocalOwner
+                                    +nonwhiteP
+                                    +bachelorsP
+                                    +internetP
+                                    +smartphoneP
+                                    +DSITEZIP
+                                   ,data = TarpTime
+                                   ,method = "nearest"
+                                   ,k2k = TRUE
+                                   ,estimand = 'ATT'
+                                  )
+
+
+matchProgram_df <- match.data(matchProgram)
+
+```
+
+Matching statistics
+```{r}
+summary(matchProgram)
+
+matchIndicator <- matchProgram_df %>%
+                 dplyr::select(FootprintID)%>%
+                 mutate(matched=1)
+ 
+
+SummaryDat<-TarpTime%>%
+          left_join(matchIndicator, by="FootprintID")%>% 
+            mutate(status = (ifelse(is.na(matched) & Program == 1,"Unmatched_Program", 
+                             ifelse(is.na(matched) & Program == 0,"Unmatched_NonProgram", 
+                             ifelse(matched == 1 & Program == 1,"Matched_Program", 
+                             ifelse(matched == 1 & Program == 0,"Matched_NonProgram", NA))))))
+
+MatchingSummary<- SummaryDat%>%
+  dplyr::group_by(status)%>%
+  dplyr::summarize(mean(Val_sqf),
+                   n())
+
+MatchingSummary
+```
+
+
+# Plot Descriptive Differences
+```{r}
+
+#plot1a<-ggplot(summarySE(ProgTarpTime, measurevar="CovrPrd", groupvars=c("HomeSizeQaurtiles")),
+              #aes(x=HomeSizeQaurtiles, y=CovrPrd, group=1))+
+                #geom_errorbar(width=.1, aes(ymin=CovrPrd-ci, ymax=CovrPrd+ci))+
+                 #geom_point(shape=21, size=3, fill="white")
+#plot1a
+
+#plot1b<-ggplot(summarySE(ProgTarpTime, measurevar="CovrPrd", groupvars=c("AssessValQaurtiles")),
+              #aes(x=AssessValQaurtiles, y=CovrPrd, group=1))+
+                #geom_errorbar(width=.1, aes(ymin=CovrPrd-ci, ymax=CovrPrd+ci))+
+                 #geom_point(shape=21, size=3, fill="white")
+#plot1b
+
+#Plot2 <- ggplot(summarySE(ProgTarpTime, measurevar="CovrPrd", groupvars=c("HomeSizeQaurtiles","HomeValLS")),
+       #aes(x=HomeSizeQaurtiles, y=CovrPrd, colour=HomeValLS, group=HomeValLS)) +
+  
+    #geom_errorbar(aes(ymin=CovrPrd-se, ymax=CovrPrd+se), colour="black", width=.1) +
+    #geom_line() +
+    #geom_point( size=3, shape=21, fill="white") + # 21 is filled circle
+    #xlab("Home Size (Quartiles)") +
+    #ylab("Average Time Untill Installation (Weeks)") +
+    #scale_colour_hue(name="Assesed Home Value",    # Legend label, use darker colors
+                     #labels=c("Below Median","Above Median"),
+                     #l=50, # Use darker colors, lightness=40
+                     #guide = guide_legend(reverse=TRUE)) +    
+    #theme_bw()+
+            # Position legend in bottom right
+    #theme(legend.justification=c(.95,.95),
+     #     legend.position=c(.95,.95))
+Plot2
+
+
+Plot3<- ggplot(filter(TarpTime, Program==1), aes(x = CovrPrd, y = HomeSizeQaurtiles  )) +
+        geom_boxplot(size = .5) +
+        geom_jitter(alpha = .1) +
+        theme(axis.text.x = element_text( hjust = 1, vjust = 1))
+
+Plot3
+
+
+stat1 <- ddply(TarpTime, "Program", summarise, Val.stat1=mean(VAPTOTAL))
+stat1
+
+plot4 <- ggplot(TarpTime, aes(x=VAPTOTAL, fill=as.factor(Program))) +
+    geom_histogram(binwidth=5000, alpha=.5, position="identity")+
+    geom_vline(data=stat1, aes(xintercept=Val.stat1,  colour=as.factor(Program)),linetype="dashed", size=1)+
+    scale_x_continuous(limits = c(0, 400000))
+
+plot4
+
+
+stat2 <- ddply(TarpTime, "Program", summarise, Val.stat2=median(FootprintArea))
+stat2
+
+plot5 <- ggplot(TarpTime, aes(x=FootprintArea, fill=as.factor(Program))) +
+    geom_histogram(binwidth=100, alpha=.5, position="identity")+
+    geom_vline(data=stat2, aes(xintercept=Val.stat2,  colour=as.factor(Program)),linetype="dashed", size=1)+
+    scale_x_continuous(limits = c(0, 5000))
+
+plot5
+
+stat3 <- ddply(prs_df, "Program", summarise, Val.stat3=median(pr_score))
+stat3
+
+plot6 <- ggplot(prs_df, aes(x=pr_score, fill=as.factor(Program))) +
+    geom_histogram(binwidth=0.01, alpha=.5, position="identity")+
+    geom_vline(data=stat3, aes(xintercept=Val.stat3,  colour=as.factor(Program)),linetype="dashed", size=1)+
+    scale_x_continuous(limits = c(0, 0.5))
+
+plot6
+
+
+
+#make poison density * data for truncated distribution @ 5
+xValue <- 0:4
+lambda <- mean(TarpTime$CovrPrd)
+max.support <- 5
+
+Poisson <- dgaitdpois(xValue, 
+                  lambda,
+                  max.support
+                  )
+
+Poisson <- Poisson*length(TarpTime$CovrPrd)
+
+Poisson<-as.data.frame(Poisson)
+DenseLine<-data.frame(xValue,Poisson)
+
+#Overlay Data and Expected Counts
+ggplot(TarpTime, aes(x = CovrPrd)) + 
+  geom_histogram(colour = "black", fill = "white", binwidth = 1)+
+  geom_line(DenseLine, mapping=aes(x=xValue, y=Poisson, color= 'Poisson'), size=1.1)+
+  scale_color_manual(name = "Expected Counts", values = c("Poisson" = "darkblue"))+
+  labs(x = "Elapsed Periods Untill Service", y = "Frequency")
+
+
+
+
+#make poison density * data for truncated distribution @ 5 (Program Only)
+xValue <- 0:4
+lambda <- mean(matchProgram_df$CovrPrd)
+max.support <- 5
+
+Poisson <- dgaitdpois(xValue, 
+                  lambda,
+                  max.support
+                  )
+
+Poisson <- Poisson*length(matchProgram_df$CovrPrd)
+
+Poisson<-as.data.frame(Poisson)
+DenseLine<-data.frame(xValue,Poisson)
+
+#Overlay Data and Expected Counts
+ggplot(matchProgram_df, aes(x = CovrPrd)) + 
+  geom_histogram(colour = "black", fill = "white", binwidth = 1)+
+  geom_line(DenseLine, mapping=aes(x=xValue, y=Poisson, color= 'Poisson'), size=1.1)+
+  scale_color_manual(name = "Expected Counts", values = c("Poisson" = "darkblue"))+
+  labs(x = "Elapsed Periods Untill Service", y = "Frequency")
+
+
+
+
+
+
+```
+
+### Regressions
+```{r}
+####Poisson####
+
+#Program Only
+Program <- vglm(CovrPrd~
+            I(FootprintArea/500)
+           +log(I(NNDist.NN/100))
+           +log(I(Val_sqf/10))
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +S1STORIES
+           +S1BATHRMS
+           +BuildingType
+           +log(I(DistROE/1000))
+           #+log(DistCity/1000)
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           + DSITEZIP
+           ,family=gaitdpoisson(max.support = max.support)
+           ,data = ProgTarpTime,
+            )
+
+#Non Program Only
+NProgram_Match <- vglm(CovrPrd~
+            I(FootprintArea/500)
+           +log(I(NNDist.NN/100))
+           +log(I(Val_sqf/10))
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +S1STORIES
+           +S1BATHRMS
+           +BuildingType
+           +log(I(DistROE/1000))
+          # +log(DistCity/1000)
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+          + DSITEZIP
+           ,family=gaitdpoisson( max.support = max.support)
+          , data = filter(matchProgram_df, Program==0))
+
+#Matched Program
+Matched <- vglm(CovrPrd~
+           I(FootprintArea/500)
+           +log(I(NNDist.NN/100))
+           +log(I(Val_sqf/10))
+           +Program
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +S1STORIES
+           +S1BATHRMS
+           +BuildingType
+           +log(I(DistROE/1000))
+          # +log(DistCity/1000)
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           +DSITEZIP
+           ,family=gaitdpoisson( max.support = max.support)
+          , data = matchProgram_df)
+
+#Program interacted Matched
+Interact_Matched <- vglm(CovrPrd~
+            I(FootprintArea/500)*Program
+           +log(I(NNDist.NN/100))*Program
+           +log(I(Val_sqf/10))*Program
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +S1STORIES
+           +S1BATHRMS
+           +BuildingType
+           +log(I(DistROE/1000))
+          # +log(DistCity/1000)
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           ,family=gaitdpoisson( max.support = max.support)
+          , data = matchProgram_df)
+
+#interacted FE
+Interact_Matched_FE <- vglm(CovrPrd~
+            I(FootprintArea/500)*Program
+           +log(I(NNDist.NN/100))*Program
+           +log(I(Val_sqf/10))*Program
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +S1STORIES
+           +S1BATHRMS
+           +BuildingType
+           +log(I(DistROE/1000))
+          # +log(DistCity/1000)
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+          + DSITEZIP
+           ,family=gaitdpoisson( max.support = max.support)
+          , data = matchProgram_df)
+
+#interacted FE (no scaling for figure)
+Interact_Matched_FE_NS <- vglm(CovrPrd~
+            FootprintArea*Program
+           +log(NNDist.NN)*Program
+           +log(Val_sqf)*Program
+           +nonwhiteP*Program
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +S1STORIES
+           +S1BATHRMS
+           +BuildingType
+           +log(DistROE)
+          # +log(DistCity/1000)
+           +LocalOwner
+           
+           +bachelorsP
+           +internetP
+           +smartphoneP
+          + DSITEZIP
+           ,family=gaitdpoisson( max.support = max.support)
+          , data = matchProgram_df)
+
+
+#interacted Trimmed
+Interact_Trimmed_FE <- vglm(CovrPrd~
+           I(FootprintArea/500)*Program
+           +log(I(NNDist.NN/100))*Program
+           +log(I(Val_sqf/10))*Program
+           +log(X1mSWmphBnd)
+           +age+I(age^2)
+           +S1STORIES
+           +S1BATHRMS
+           +BuildingType
+           +log(I(DistROE/1000))
+           #+log(DistCity/1000)
+           +LocalOwner
+           +nonwhiteP
+           +bachelorsP
+           +internetP
+           +smartphoneP
+           + DSITEZIP
+           ,family=gaitdpoisson( max.support = max.support)
+          , data = prTrimmed_df)
+
+summaryvglm(Program)
+summaryvglm(NProgram_Match)
+summaryvglm(Matched)
+summaryvglm(Interact_Matched)
+summaryvglm(Interact_Matched_FE)
+summaryvglm(Interact_Trimmed_FE)
+
+
+#print Reg Tables In HTML or latex (by changing to texreg command)
+Regout<-texreg(list(Program, NProgram_Match, Matched,Interact_Matched_FE,Interact_Trimmed_FE),
+               #(custom.title = "Test, if rescaled, units in ()"),
+               custom.model.names = c("(1) Program","(2) Non-Program","(3) Combined","(4) Combined"," (5) Combined"),
+               omit.coef=c('DSITEZIP'),
+               custom.coef.names = c("Intercept",
+                                     "Roof Area (500 sq.ft.)",
+                                     "lnAverage Neighbor Dist.(100 ft)",
+                                     "lnValue (10 $/sq.ft.)",
+                                     "lnWindspeed",
+                                     "age",
+                                     "age$^2$",
+                                     "Stories",
+                                     "Bathrooms",
+                                     "Manufactured",
+                                     "Multi Family",
+                                     "Dist. To ROE Site (1000ft.)",
+                                     "Local Owner ",
+                                     "Perc. Non-White",
+                                     "Perc. Bachelors",
+                                     "Perc. Internet",
+                                     "Perc. Smartphone",
+                                     "Program Tarp",
+                                     "Program Tarp : lnRoof Area",
+                                     "Program Tarp : lnNeighbor Dist",
+                                     "Program Tarp : lnValue"
+                                     ),
+               reorder.coef = c(1,2,3,4,18,19,20,21,5,6,7,8,9,10,11,14,15,16,17,12,13),
+               groups = list("Variables of Interest" = 2:8,"Damage Related Controls" = 9:15,"Demographic and Spatial Controls" = 16:21),
+               custom.gof.rows=(list("Zip Code FE" = c("Yes","Yes","Yes","Yes","Yes"),
+                                     "Matched" = c("No","Yes","Yes","Yes","Trimmed"))),
+               #file = "Regout.html",
+               )
+
+Regout
+
+```
+
+#Marginal Effects Table
+```{r,fig.width=10, fig.height= 6}
+#Marginal Conditions - mean and 1sd
+mean1<-round(mean(matchProgram_df$FootprintArea),0)
+sd1<-round(sd(matchProgram_df$FootprintArea),0)
+
+mean2<-round(mean(matchProgram_df$Val_sqf),0)
+sd2<-round(sd(matchProgram_df$Val_sqf),0)
+
+mean3<-round(mean(matchProgram_df$NNDist.NN),0)
+sd3<-round(sd(matchProgram_df$NNDist.NN),0)
+
+#marginal calculation (based of https://strengejacke.github.io/ggeffects/index.html)
+Pred1<-ggeffect(Interact_Matched_FE_NS, terms = c(print(paste0("FootprintArea","[", mean1,",",mean1+sd1,"]")),"Program"))
+Pred2<-ggeffect(Interact_Matched_FE_NS, terms = c(print(paste0("Val_sqf","[", mean2,",",mean2+sd2,"]")),"Program"))
+Pred3<-ggeffect(Interact_Matched_FE_NS, terms = c(print(paste0("NNDist.NN","[", mean3,",",mean3+sd3,"]")),"Program"))
+Pred4<-ggeffect(Interact_Matched_FE_NS, terms = c("Program"))
+
+#Make rows with differences between  mean and mean+1sd predictions
+Pred1Matrix<-10*cbind(Pred1$predicted[3,]-Pred1$predicted[1,],
+                   Pred1$predicted[4,]-Pred1$predicted[2,],
+                  ((Pred1$predicted[4,]-Pred1$predicted[2,])-(Pred1$predicted[3,]-Pred1$predicted[1,])))
+
+Pred2Matrix<-10*cbind(Pred2$predicted[3,]-Pred2$predicted[1,],
+                   Pred2$predicted[4,]-Pred2$predicted[2,],
+                  ((Pred2$predicted[4,]-Pred2$predicted[2,])-(Pred2$predicted[3,]-Pred2$predicted[1,])))
+
+Pred3Matrix<-10*cbind(Pred3$predicted[3,]-Pred3$predicted[1,],
+                   Pred3$predicted[4,]-Pred3$predicted[2,],
+                  ((Pred3$predicted[4,]-Pred3$predicted[2,])-(Pred3$predicted[3,]-Pred3$predicted[1,])))
+
+Pred4Matrix<-10*cbind(Pred3$predicted[1,],
+                   Pred3$predicted[2,],
+                  ((Pred3$predicted[2,]-Pred3$predicted[1,])))
+
+#Make rows with % differences between mean and mean+1sd predictions                
+Pred1MatrixPerc<- 100*cbind((Pred1$predicted[3,]-Pred1$predicted[1,])/Pred1$predicted[1,],
+                   (Pred1$predicted[4,]-Pred1$predicted[2,])/Pred1$predicted[2,], NA)
+
+Pred2MatrixPerc<- 100*cbind((Pred2$predicted[3,]-Pred2$predicted[1,])/Pred2$predicted[1,],
+                   (Pred2$predicted[4,]-Pred2$predicted[2,])/Pred2$predicted[2,], NA)
+
+Pred3MatrixPerc<- 100*cbind((Pred3$predicted[3,]-Pred3$predicted[1,])/Pred3$predicted[1,],
+                   (Pred3$predicted[4,]-Pred3$predicted[2,])/Pred3$predicted[2,], NA)
+
+#make table
+PredTable<-as.data.frame(round(rbind(
+                  Pred1Matrix,
+                  Pred1MatrixPerc,
+                  Pred3Matrix,
+                  Pred3MatrixPerc,
+                  Pred2Matrix,
+                  Pred2MatrixPerc,
+                  Pred4Matrix),2))%>%
+                    rename("Program=0" = V1,"Program=1" = V2, "Difference"= V3)
+              
+rownames(PredTable)<-c("Roof Area",
+                       "% Change",
+                       "Avg Neighbor Dist.",
+                       "  % Change",
+                       "Property Value",
+                       " % Change",
+                       "Program")
+
+library(expss)
+PredTable
+xtable(PredTable)
+
+#re-estimate margins with full data range and make corrisponding plots
+Pred1<-ggeffect(Interact_Matched_FE_NS, terms = c("FootprintArea[all]","Program"))
+Pred2<-ggeffect(Interact_Matched_FE_NS, terms = c("Val_sqf[all]","Program"))
+Pred3<-ggeffect(Interact_Matched_FE_NS, terms = c("NNDist.NN[all]","Program"))
+Pred4<-ggeffect(Interact_Matched_FE_NS, terms = "Program")
+Predx<-ggeffect(Interact_Matched_FE_NS, terms = c("FootprintArea","NNDist.NN[111,1417,4655]","Program"))
+
+formatter10 <- function(x){ 
+    x*10
+}
+
+p1<-plot(Pred1) +
+         labs(x = "Roof Area (Sq. Feet)", 
+         y = "Estimated Days Elapsed", 
+         title = "")+
+         geom_rug(col="black",alpha=0.01, size=.3)+
+         scale_x_continuous(limits = c(0,(mean1+sd1+sd1)))+
+         scale_y_continuous(labels = formatter10, limits = c(0.6,1.5))
+
+p2<-plot(Pred2) +
+         labs(x = "Value ($ per Sq. Foot)", 
+         y = "Estimated Days Elapsed", 
+         title = "")+
+         geom_rug(col="black",alpha=0.01, size=.3)+
+         scale_x_continuous(limits = c(0,mean2+sd2+sd2))+
+         scale_y_continuous(labels = formatter10, limits = c(0.6,1.5))
+
+p3<-plot(Pred3)+
+         labs(x = "Reverse Distance to Nearest Neighbors (Density)", 
+         y = "Estimated Days Elapsed",
+         title = "")+
+         geom_rug(col="black",alpha=0.01, size=.3)+
+         scale_x_reverse(limits = c(mean3+sd3+sd3,0))+
+         scale_y_continuous(labels = formatter10, limits = c(0.6,1.5))
+
+p4<-plot(Pred4)+
+         labs(x = "Program Property", 
+         y = "Estimated Days Elapsed", 
+         title = "")+
+         geom_rug(col="black",alpha=0.01, size=.3)+
+         scale_y_continuous(labels = formatter10)
+
+p5<-plot(Predx)+
+         labs(x = "Roof Area (Sq. Feet)", 
+         y = "Estimated Days Elapsed", 
+         colour = "Average Neighbor Distance",
+         title = "The effects of Roof Area, Conditional on Neighbor Distance (Program = 1)")+
+      scale_colour_manual(values = c("#F8766D", "#00BFC4","#619CFF"), labels = c( "Min (Very Dense)","Mean","+2sd(Less Dense)"))+
+      theme(legend.position="bottom", plot.title = element_text(size=15,hjust = 0.5))+
+      scale_x_continuous(limits = c(0,(mean1+sd1+sd1)))+
+      geom_rug(col="black",alpha=0.005, size=.3)+
+         scale_y_continuous(labels = formatter10)
+
+#grid.arrange(arrangeGrob(p1, p2,p3,p4),p5, nrow = 3)
+grid.arrange(p4, p1,p3, p2, nrow = 2)
+p5
+
+
+
+   
+```
+
+
+Summary Stats
+```{r}
+## summary table
+library(vtable)
+
+
+Dattable<-sumtable(SummaryDat,
+                    vars = c('Program',
+                             'FootprintArea',
+                             'NNDist.NN',
+                             'VAPTOTAL',
+                             'Val_sqf',
+                             'X1mSWmphBnd',
+                             'age',
+                             'S1STORIES',
+                             'S1BATHRMS',
+                             'BuildingType',
+                             'nonwhiteP',
+                             'bachelorsP',
+                             'internetP',
+                             'smartphoneP',
+                             'DistROE',
+                             'LocalOwner'),
+                    labels = c('Program',
+                              'Roof Area',
+                              'Average Neighbor Dist.',
+                              'Assesed Value',
+                              'Value ($/sq.ft.)',
+                              'Windspeed',
+                              'age',
+                              'Stories',
+                              'Bathrooms',
+                              'Building Type',
+                              'Perc. Non-White',
+                              'Perc. Bachelors ',
+                              'Perc. Internet',
+                              'Perc. Smartphone',
+                              'Dist. To ROE Site',
+                              'Local Owner'
+                              ),
+                    out = 'latex',
+                    digits = 2,
+                    fixed.digits = FALSE,
+                    group.test = FALSE,
+                    file='Datsummary.tex',
+                   title=" ")
+
+
+MatchedDattable<-sumtable(SummaryDat, 
+                    group = 'status', 
+                    vars = c(
+                             'FootprintArea',
+                             'NNDist.NN',
+                             'VAPTOTAL',
+                             'Val_sqf',
+                             'X1mSWmphBnd',
+                             'age',
+                             'S1STORIES',
+                             'S1BATHRMS',
+                             'BuildingType',
+                             'nonwhiteP',
+                             'bachelorsP',
+                             'internetP',
+                             'smartphoneP',
+                             'DistROE',
+                             'LocalOwner'),
+                    labels = c(
+                              'Roof Area',
+                              'Average Neighbor Dist.',
+                              'Accesed Value',
+                              'Value ($/sq.ft.)',
+                              'Windspeed',
+                              'age',
+                              'Stories',
+                              'Bathrooms',
+                              'Building Type',
+                              'Perc. Non-White',
+                              'Perc. Bachelors ',
+                              'Perc. Internet',
+                              'Perc. Smartphone',
+                              'Dist. To ROE Site',
+                              'Local Owner'
+                              ),
+                    out = 'latex',
+                    digits = 2,
+                    fixed.digits = FALSE,
+                    group.test = FALSE,
+                    file='MatchDatsummary.tex',
+                   title=" ") 
+
+```
+
+### Make reg and summary tables
+```{r}
+table1<-stargazer(Program@coefficients,
+                  out = paste(getwd(),"/RegTable1.html", sep=""),
+                  type = "html", #change to latex for final
+                  no.space=TRUE)
+
+
+
+
+Regout
+
+```
+
+
+
