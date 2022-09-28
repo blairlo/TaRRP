@@ -328,7 +328,7 @@ NNDist<-as.data.frame(NNDist)%>%
                        dist.3+
                        dist.4+
                        dist.5
-                       /5))#Make Average inverse distance of the first 5 neighbors
+                       /5))#Make Average distance of the first 5 neighbors
 
 TarpTimeUnfilter<-cbind(TarpTimeUnfilter,NNDist$NN)
 ```
@@ -1058,9 +1058,6 @@ table1<-stargazer(Program@coefficients,
                   out = paste(getwd(),"/RegTable1.html", sep=""),
                   type = "html", #change to latex for final
                   no.space=TRUE)
-
-
-
 
 Regout
 
