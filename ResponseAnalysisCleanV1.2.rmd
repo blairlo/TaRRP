@@ -575,7 +575,7 @@ plot6
 
 
 
-#make poison density * data for truncated distribution @ 5
+#make Poisson density * data for truncated distribution @ 5
 xValue <- 0:4
 lambda <- mean(TarpTime$CovrPrd)
 max.support <- 5
@@ -596,9 +596,6 @@ ggplot(TarpTime, aes(x = CovrPrd)) +
   geom_line(DenseLine, mapping=aes(x=xValue, y=Poisson, color= 'Poisson'), size=1.1)+
   scale_color_manual(name = "Expected Counts", values = c("Poisson" = "darkblue"))+
   labs(x = "Elapsed Periods Untill Service", y = "Frequency")
-
-
-
 
 #make poison density * data for truncated distribution @ 5 (Program Only)
 xValue <- 0:4
@@ -622,11 +619,6 @@ ggplot(matchProgram_df, aes(x = CovrPrd)) +
   scale_color_manual(name = "Expected Counts", values = c("Poisson" = "darkblue"))+
   labs(x = "Elapsed Periods Untill Service", y = "Frequency")
 
-
-
-
-
-
 ```
 
 ### Regressions
@@ -638,6 +630,7 @@ Program <- vglm(CovrPrd~
             I(FootprintArea/500)
            +log(I(NNDist.NN/100))
            +log(I(Val_sqf/10))
+           +nonwhiteP
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +S1STORIES
@@ -646,7 +639,6 @@ Program <- vglm(CovrPrd~
            +log(I(DistROE/1000))
            #+log(DistCity/1000)
            +LocalOwner
-           +nonwhiteP
            +bachelorsP
            +internetP
            +smartphoneP
@@ -660,6 +652,7 @@ NProgram_Match <- vglm(CovrPrd~
             I(FootprintArea/500)
            +log(I(NNDist.NN/100))
            +log(I(Val_sqf/10))
+           +nonwhiteP
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +S1STORIES
@@ -668,7 +661,6 @@ NProgram_Match <- vglm(CovrPrd~
            +log(I(DistROE/1000))
           # +log(DistCity/1000)
            +LocalOwner
-           +nonwhiteP
            +bachelorsP
            +internetP
            +smartphoneP
@@ -681,6 +673,7 @@ Matched <- vglm(CovrPrd~
            I(FootprintArea/500)
            +log(I(NNDist.NN/100))
            +log(I(Val_sqf/10))
+           +nonwhiteP
            +Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
@@ -690,7 +683,6 @@ Matched <- vglm(CovrPrd~
            +log(I(DistROE/1000))
           # +log(DistCity/1000)
            +LocalOwner
-           +nonwhiteP
            +bachelorsP
            +internetP
            +smartphoneP
@@ -703,6 +695,7 @@ Interact_Matched <- vglm(CovrPrd~
             I(FootprintArea/500)*Program
            +log(I(NNDist.NN/100))*Program
            +log(I(Val_sqf/10))*Program
+           +nonwhiteP*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +S1STORIES
@@ -711,7 +704,6 @@ Interact_Matched <- vglm(CovrPrd~
            +log(I(DistROE/1000))
           # +log(DistCity/1000)
            +LocalOwner
-           +nonwhiteP
            +bachelorsP
            +internetP
            +smartphoneP
@@ -723,6 +715,7 @@ Interact_Matched_FE <- vglm(CovrPrd~
             I(FootprintArea/500)*Program
            +log(I(NNDist.NN/100))*Program
            +log(I(Val_sqf/10))*Program
+           +nonwhiteP*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +S1STORIES
@@ -731,7 +724,6 @@ Interact_Matched_FE <- vglm(CovrPrd~
            +log(I(DistROE/1000))
           # +log(DistCity/1000)
            +LocalOwner
-           +nonwhiteP
            +bachelorsP
            +internetP
            +smartphoneP
@@ -767,6 +759,7 @@ Interact_Trimmed_FE <- vglm(CovrPrd~
            I(FootprintArea/500)*Program
            +log(I(NNDist.NN/100))*Program
            +log(I(Val_sqf/10))*Program
+           +nonwhiteP*Program
            +log(X1mSWmphBnd)
            +age+I(age^2)
            +S1STORIES
@@ -775,7 +768,6 @@ Interact_Trimmed_FE <- vglm(CovrPrd~
            +log(I(DistROE/1000))
            #+log(DistCity/1000)
            +LocalOwner
-           +nonwhiteP
            +bachelorsP
            +internetP
            +smartphoneP
@@ -790,7 +782,6 @@ summaryvglm(Interact_Matched)
 summaryvglm(Interact_Matched_FE)
 summaryvglm(Interact_Trimmed_FE)
 
-
 #print Reg Tables In HTML or latex (by changing to texreg command)
 Regout<-texreg(list(Program, NProgram_Match, Matched,Interact_Matched_FE,Interact_Trimmed_FE),
                #(custom.title = "Test, if rescaled, units in ()"),
@@ -800,26 +791,29 @@ Regout<-texreg(list(Program, NProgram_Match, Matched,Interact_Matched_FE,Interac
                                      "Roof Area (500 sq.ft.)",
                                      "lnAverage Neighbor Dist.(100 ft)",
                                      "lnValue (10 $/sq.ft.)",
+                                     "Perc. Non-White",
                                      "lnWindspeed",
                                      "age",
                                      "age$^2$",
                                      "Stories",
                                      "Bathrooms",
-                                     "Manufactured",
+                                     "Mobile Home",
                                      "Multi Family",
                                      "Dist. To ROE Site (1000ft.)",
                                      "Local Owner ",
-                                     "Perc. Non-White",
                                      "Perc. Bachelors",
                                      "Perc. Internet",
                                      "Perc. Smartphone",
                                      "Program Tarp",
                                      "Program Tarp : lnRoof Area",
                                      "Program Tarp : lnNeighbor Dist",
-                                     "Program Tarp : lnValue"
+                                     "Program Tarp : lnValue",
+                                     "Program Tarp : Perc. Non-White"
                                      ),
-               reorder.coef = c(1,2,3,4,18,19,20,21,5,6,7,8,9,10,11,14,15,16,17,12,13),
-               groups = list("Variables of Interest" = 2:8,"Damage Related Controls" = 9:15,"Demographic and Spatial Controls" = 16:21),
+               reorder.coef = c(1,2,3,4,5,18,19,20,21,22,6,7,8,9,10,11,12,14,15,16,17,13),
+               groups = list("Variables of Interest" = 2:10,
+                             "Damage Related Controls" = 11:17,
+                             "Access Related Controls" = 18:21),
                custom.gof.rows=(list("Zip Code FE" = c("Yes","Yes","Yes","Yes","Yes"),
                                      "Matched" = c("No","Yes","Yes","Yes","Trimmed"))),
                #file = "Regout.html",
@@ -841,11 +835,15 @@ sd2<-round(sd(matchProgram_df$Val_sqf),0)
 mean3<-round(mean(matchProgram_df$NNDist.NN),0)
 sd3<-round(sd(matchProgram_df$NNDist.NN),0)
 
+mean4<-round(mean(matchProgram_df$nonwhiteP),2)
+sd4<-round(sd(matchProgram_df$nonwhiteP),2)
+
 #marginal calculation (based of https://strengejacke.github.io/ggeffects/index.html)
 Pred1<-ggeffect(Interact_Matched_FE_NS, terms = c(print(paste0("FootprintArea","[", mean1,",",mean1+sd1,"]")),"Program"))
 Pred2<-ggeffect(Interact_Matched_FE_NS, terms = c(print(paste0("Val_sqf","[", mean2,",",mean2+sd2,"]")),"Program"))
 Pred3<-ggeffect(Interact_Matched_FE_NS, terms = c(print(paste0("NNDist.NN","[", mean3,",",mean3+sd3,"]")),"Program"))
 Pred4<-ggeffect(Interact_Matched_FE_NS, terms = c("Program"))
+Pred5<-ggeffect(Interact_Matched_FE_NS, terms = c(print(paste0("nonwhiteP","[", mean4,",",mean4+sd4,"]")),"Program"))
 
 #Make rows with differences between  mean and mean+1sd predictions
 Pred1Matrix<-10*cbind(Pred1$predicted[3,]-Pred1$predicted[1,],
@@ -864,6 +862,10 @@ Pred4Matrix<-10*cbind(Pred3$predicted[1,],
                    Pred3$predicted[2,],
                   ((Pred3$predicted[2,]-Pred3$predicted[1,])))
 
+Pred5Matrix<-10*cbind(Pred5$predicted[3,]-Pred5$predicted[1,],
+                   Pred5$predicted[4,]-Pred5$predicted[2,],
+                  ((Pred5$predicted[4,]-Pred5$predicted[2,])-(Pred5$predicted[3,]-Pred5$predicted[1,])))
+
 #Make rows with % differences between mean and mean+1sd predictions                
 Pred1MatrixPerc<- 100*cbind((Pred1$predicted[3,]-Pred1$predicted[1,])/Pred1$predicted[1,],
                    (Pred1$predicted[4,]-Pred1$predicted[2,])/Pred1$predicted[2,], NA)
@@ -874,24 +876,34 @@ Pred2MatrixPerc<- 100*cbind((Pred2$predicted[3,]-Pred2$predicted[1,])/Pred2$pred
 Pred3MatrixPerc<- 100*cbind((Pred3$predicted[3,]-Pred3$predicted[1,])/Pred3$predicted[1,],
                    (Pred3$predicted[4,]-Pred3$predicted[2,])/Pred3$predicted[2,], NA)
 
-#make table
+Pred5MatrixPerc<- 100*cbind((Pred5$predicted[3,]-Pred5$predicted[1,])/Pred5$predicted[1,],
+                   (Pred5$predicted[4,]-Pred5$predicted[2,])/Pred5$predicted[2,], NA)
+
+#make table (these are rearranged a bit to match results tables, hypothesis in the paper etc.)
 PredTable<-as.data.frame(round(rbind(
+                  Pred4Matrix,
                   Pred1Matrix,
                   Pred1MatrixPerc,
                   Pred3Matrix,
                   Pred3MatrixPerc,
                   Pred2Matrix,
                   Pred2MatrixPerc,
-                  Pred4Matrix),2))%>%
+                  Pred5Matrix,
+                  Pred5MatrixPerc
+                  ),2))%>%
                     rename("Program=0" = V1,"Program=1" = V2, "Difference"= V3)
               
-rownames(PredTable)<-c("Roof Area",
+rownames(PredTable)<-c(
+
+                       "Program",
+                       "Roof Area",
                        "% Change",
                        "Avg Neighbor Dist.",
-                       "  % Change",
-                       "Property Value",
                        " % Change",
-                       "Program")
+                       "Property Value",
+                       "  % Change",
+                       "Perc. Non-White",
+                       "   % Change")
 
 library(expss)
 PredTable
@@ -903,6 +915,7 @@ Pred2<-ggeffect(Interact_Matched_FE_NS, terms = c("Val_sqf[all]","Program"))
 Pred3<-ggeffect(Interact_Matched_FE_NS, terms = c("NNDist.NN[all]","Program"))
 Pred4<-ggeffect(Interact_Matched_FE_NS, terms = "Program")
 Predx<-ggeffect(Interact_Matched_FE_NS, terms = c("FootprintArea","NNDist.NN[111,1417,4655]","Program"))
+Pred5<-ggeffect(Interact_Matched_FE_NS, terms = c("nonwhiteP[all]","Program"))
 
 formatter10 <- function(x){ 
     x*10
@@ -950,10 +963,20 @@ p5<-plot(Predx)+
       geom_rug(col="black",alpha=0.005, size=.3)+
          scale_y_continuous(labels = formatter10)
 
-#grid.arrange(arrangeGrob(p1, p2,p3,p4),p5, nrow = 3)
-grid.arrange(p4, p1,p3, p2, nrow = 2)
-p5
+p6<-plot(Pred5)+
+         labs(x = "Perc. Non-White", 
+         y = "Estimated Days Elapsed", 
+         title = "")+
+         geom_rug(col="black",alpha=0.2, size=1)+
+         scale_x_continuous(limits = c(0,mean4+sd4+sd4))+
+         scale_y_continuous(labels = formatter10, limits = c(0.6,1.5))
 
+
+#grid.arrange(arrangeGrob(p1, p2,p3,p4),p5, nrow = 3)
+grid.arrange(p1,p3,p2,p6, nrow = 2)
+p4
+p5
+p6
 
 
    
@@ -1051,17 +1074,5 @@ MatchedDattable<-sumtable(SummaryDat,
                    title=" ") 
 
 ```
-
-### Make reg and summary tables
-```{r}
-table1<-stargazer(Program@coefficients,
-                  out = paste(getwd(),"/RegTable1.html", sep=""),
-                  type = "html", #change to latex for final
-                  no.space=TRUE)
-
-Regout
-
-```
-
 
 
