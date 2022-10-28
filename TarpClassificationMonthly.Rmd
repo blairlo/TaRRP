@@ -1,0 +1,786 @@
+---
+title: "InstallationClassifier"
+author: "Logan"
+date: '2022-07-20'
+output: html_document
+---
+# Prelims
+```{r}
+library(tmap) 
+library(mapview)
+library(sf)
+library(raster)
+library(stringr)
+library(questionr)
+library(dplyr)
+library(tidyr)
+library(rgdal)
+library(rgeos)
+library(ggplot2)
+library(MASS)
+library(pscl)
+library(visreg)
+library(mlogit)
+library(rstanarm)
+library(loo)
+library(bayesplot)
+library(shinystan)
+library(readxl)
+library(reshape2)
+library(data.table)
+library(randomForest)
+require(caTools)
+library(tidycensus)
+library(stargazer)
+library(exactextractr)
+library(gplots)
+library(gtools)
+library(DescTools)
+library(reticulate)
+library(sen2r)
+library(leafem)
+library(parallel)
+library(pbapply)
+
+options(rasterMaxMemory = 3e10)
+options(rasterTmpTime = 1)
+```
+
+
+# Part 2 Make property level time series
+
+### Mosaic Usable Pixels in Area of Interest
+There are several challenges when using satellite data across a large area-day: multiple tiles or "scenes" make up the study area, missing tiles at the area-day level, and clouds haze and other atmospheric factors make pixels unusable in those that are available. The following steps apply a series of masking, mosaicing, and merging to convert multiple area-day scenes to seamless imagery.
+
+### Custom Helper Function to Mosaic/Merging
+The following function helps mosaic, merge, and reclassify values of a list of rasters. 
+
+```{r}
+MosaicReclassRaster <- function(Location, # Location of raster (.tif) files
+                                Mosaic = "Y", #mosic(Y) or merge(N)
+                                bands = FALSE, #Select a specific band, if false all bands will be returned
+                                Reclass0toNA=FALSE){ #If TRUE, converts 0 values to NA
+  
+current.list <- list.files(path=paste(Location), full.names=TRUE, pattern = ".tif")
+  
+   #read in raster files as a raster stack
+  raster.list <- lapply(current.list, raster::stack)
+  
+if (bands > 0) {
+  #select band if interested in only 1
+  raster.list <- lapply(current.list, raster, band=bands)
+  
+} else{}
+  
+if (Reclass0toNA==TRUE) {
+  #reclassify 0 (unusable pixels) as NA
+  reclass_na <- matrix(c(0, NA),
+                ncol = 2,
+                byrow = TRUE) #reclass matrix
+      raster.list <- lapply(raster.list, raster::reclassify, reclass_na)
+      
+} else {}
+  
+ if (Mosaic == "Y"){
+  #if Y, average any overlapping pixels and mosaic, ignore NA
+  raster.list$fun <- mean
+    Mosaic <- do.call( raster::mosaic, raster.list)
+    
+ } else {
+    #if N, take value in first raster in the list (instead of average) unless it is NA
+    Merge <- do.call( raster::merge, raster.list)
+ }
+}
+```
+
+### Mosaic images by date
+In this particular analysis, there are 5 periods from Oct. 10th (when the Blue Roof Program initiated) to Dec. 5th (When it concluded) in which enough relatively cloud free imagery is available to cover Bay County within a week period. Referenced as "groups" in the code below, multiple days in a given week long period can be used to make up a group.
+
+```{r}
+#Run function on folders containing images by date
+#Groups together represent full coverage of bay county
+
+
+#### group 10_19.10_21 ####
+images_10_19<-MosaicReclassRaster("PlanetData/Daily/10_19-10_21/10_19_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+
+images_10_21<-MosaicReclassRaster("PlanetData/Daily/10_19-10_21/10_21_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+#### group 10_31.11_3 ####
+images_10_31<-MosaicReclassRaster("PlanetData/Daily/10_31-11_3/10_31_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+images_11_3<-MosaicReclassRaster("PlanetData/Daily/10_31-11_3/11_3_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+#### group 11_16.11_17 ####
+images_11_16<-MosaicReclassRaster("PlanetData/Daily/11_16-11_17/11_16_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+images_11_17<-MosaicReclassRaster("PlanetData/Daily/11_16-11_17/11_17_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+#### group 11_21.11_27 ####
+images_11_21<-MosaicReclassRaster("PlanetData/Daily/11_21-11_27/11_21_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+images_11_27<-MosaicReclassRaster("PlanetData/Daily/11_21-11_27/11_27_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+#### group 12_4.12_6 ####
+images_12_4<-MosaicReclassRaster("PlanetData/Daily/12_4-12_6/12_4_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+images_12_6<-MosaicReclassRaster("PlanetData/Daily/12_4-12_6/12_6_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+
+#### group 1_10.1_17 ####
+images_1_10<-MosaicReclassRaster("PlanetData/Daily/1_10-1_17/1_10_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+images_1_16<-MosaicReclassRaster("PlanetData/Daily/1_10-1_17/1_16_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+
+images_1_17<-MosaicReclassRaster("PlanetData/Daily/1_10-1_17/1_17_images", 
+                                  "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA=TRUE)
+
+```
+
+### Create Masks by Date
+```{r}
+#Run function on folders containing usable data mask (udm) by date
+#Groups together represent full coverage of bay county
+
+#### group 10_19.10_21 ####
+mask_10_19 <- MosaicReclassRaster("PlanetData/Daily/10_19-10_21/10_19_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+mask_10_21 <- MosaicReclassRaster("PlanetData/Daily/10_19-10_21/10_21_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+#### group 10_31.11_3 ####
+mask_10_31 <- MosaicReclassRaster("PlanetData/Daily/10_31-11_3/10_31_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+mask_11_3 <- MosaicReclassRaster("PlanetData/Daily/10_31-11_3/11_3_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+#### group 11_16.11_17 ####
+mask_11_16 <- MosaicReclassRaster("PlanetData/Daily/11_16-11_17/11_16_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+mask_11_17 <- MosaicReclassRaster("PlanetData/Daily/11_16-11_17/11_17_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+#### group 11_21.11_27 ####
+mask_11_21 <- MosaicReclassRaster("PlanetData/Daily/11_21-11_27/11_21_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+mask_11_27 <- MosaicReclassRaster("PlanetData/Daily/11_21-11_27/11_27_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+#### group 12_4.12_6 ####
+mask_12_4 <- MosaicReclassRaster("PlanetData/Daily/12_4-12_6/12_4_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+mask_12_6 <- MosaicReclassRaster("PlanetData/Daily/12_4-12_6/12_6_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+#### group 1_10.1_17 ####
+mask_1_10 <- MosaicReclassRaster("PlanetData/Daily/1_10-1_17/1_10_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+mask_1_16 <- MosaicReclassRaster("PlanetData/Daily/1_10-1_17/1_16_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+
+mask_1_17 <- MosaicReclassRaster("PlanetData/Daily/1_10-1_17/1_17_mask", #location
+                                "N", #mosaic (Y) or Merge (N)
+                                 1, #band 1 masks clouds, haze, and snow
+                                 Reclass0toNA=TRUE)
+
+
+```
+
+###Mask images by date
+```{r}
+
+#### group 10_19.10_21 ####
+images_10_19_masked<-mask(images_10_19,mask_10_19)
+images_10_21_masked<-mask(images_10_21,mask_10_21)
+
+#### group 10_31.11_3 ####
+images_10_31_masked<-mask(images_10_31,mask_10_31)
+images_11_3_masked<-mask(images_11_3,mask_11_3)
+
+#### group 11_16.11_17 ####
+images_11_16_masked<-mask(images_11_16,mask_11_16)
+images_11_17_masked<-mask(images_11_17,mask_11_17)
+
+#### group 11_21.11_27 ####
+images_11_21_masked<-mask(images_11_21,mask_11_21)
+images_11_27_masked<-mask(images_11_27,mask_11_27)
+
+#### group 12_4.12_6 ####
+images_12_4_masked<-mask(images_12_4,mask_12_4)
+images_12_6_masked<-mask(images_12_6,mask_12_6)
+
+#### group 1_10.1_17 ####
+images_1_10_masked<-mask(images_1_10,mask_1_10)
+images_1_16_masked<-mask(images_1_16,mask_1_16)
+images_1_17_masked<-mask(images_1_17,mask_1_17)
+
+
+```
+
+### Composite Masked Images to Make Area-Week
+```{r}
+
+#### group 10_19.10_21 ####
+Composite_10_19.10_21<-merge(images_10_19_masked,
+                             images_10_21_masked)
+
+writeRaster(Composite_10_19.10_21,"PlanetData/Daily/10_19-10_21/Composite_10_19.10_21.tif")
+
+#### group 10_31.11_3 ####
+Composite_10_31.11_3<-merge(images_10_31_masked,
+                             images_11_3_masked)
+
+writeRaster(Composite_10_31.11_3,"PlanetData/Daily/10_31-11_3/Composite_10_31.11_3.tif")
+
+#### group 11_16.11_17 ####
+Composite_11_16.11_17<-merge(images_11_16_masked,
+                             images_11_17_masked)
+
+writeRaster(Composite_11_16.11_17,"PlanetData/Daily/11_16-11_17/Composite_11_16.11_17.tif")
+
+#### group 11_21.11_27 ####
+Composite_11_21.11_27<-merge(images_11_21_masked,
+                             images_11_27_masked)
+
+writeRaster(Composite_11_21.11_27,"PlanetData/Daily/11_21-11_27/Composite_11_21.11_27.tif")
+
+#### group 12_4.12_6 ####
+Composite_12_4.12_6<-merge(images_12_4_masked,
+                             images_12_6_masked)
+
+writeRaster(Composite_12_4.12_6,"PlanetData/Daily/12_4-12_6/Composite_12_4.12_6.tif")
+
+#### group 1_10.1_17 ####
+Composite_1_10.1_17<-merge(images_1_10_masked,
+                            images_1_16_masked,
+                             images_1_17_masked)
+
+writeRaster(Composite_1_10.1_17,"PlanetData/Daily/1_10-1_17/Composite_1_10.1_17.tif")
+
+```
+
+# Classification
+
+### Load training footprints
+These are training data derived from high res January imagery in the case of "no tarp" training plots, and predicted/cleaned program footprint from the Program classifier.
+
+```{r}
+#read in training plots (program)
+#These also happen to be our universe of program properties
+ProgramTarp<-st_zm(read_sf("Building Data/Programids.shp"))
+
+#read in training plots (roof/other)
+NoTarp<-st_zm(read_sf("Building Data/RoofMaster.shp"))
+NoTarpUpdate<-st_zm(read_sf("Building Data/RoofUpdateX.shp"))
+
+
+```
+
+### Function extract image by footprint and save seperatly as .tif(s)
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+#function with 4 arguments
+ClipRasterSave <- function(raster,clippingfeatures,outpath,labelvar){
+
+#make projections equal
+clippingfeaturesproj<-st_transform(clippingfeatures, crs(raster))
+
+#crop training plots that overlap image
+CroppedFeatures<-st_crop(clippingfeaturesproj, extent(raster))
+
+#make 3 band
+raster<- dropLayer(raster,4)
+
+#check to make sure features and images overlap. 
+if (length(CroppedFeatures$geometry) > 0) { #If so run:
+  
+         clip.list<-lapply(1:nrow(CroppedFeatures), function(x)
+          #crop imagery to the footprint extents and mask over non-footprint pixel
+            clips<-raster::mask(crop(raster, 
+                                     extent(CroppedFeatures[x,])), 
+                                     CroppedFeatures[x,])) %>%
+                    
+
+            
+#re scale to maximum value of raster to 255 (e.g. 8 bit)
+lapply(calc, fun=function(x){((x - min(raster::minValue(raster))) * 255)/((max(raster::maxValue(raster)))/5) - min(raster::minValue(raster)) + 0})%>%
+         
+#limit max to 255
+lapply(clamp,0, 255)
+        
+
+names(clip.list) <- CroppedFeatures[[labelvar]]
+
+mapply(writeRaster
+       ,clip.list
+       ,file=paste0(outpath, names(clip.list)) #export by name
+       ,overwrite=TRUE
+       ,format="GTiff"
+       ,datatype="INT1U"
+       #,options="TFW=YES"
+      )
+
+} else { 
+#if not return nothing (to avoid a problematic error in loops)
+}
+  }
+
+```
+
+
+### Extract image by footprint
+```{r}
+#make a list of images
+current.list <- list.files(path=paste("PlanetTrainingComposite"), full.names=TRUE, pattern = ".tif")
+
+#read in as a list of raster stacks
+raster.list <- lapply(current.list, raster::stack)
+
+#ProgramTarpTest<-head(ProgramTarp,10)
+
+#loop function over list
+ProgramClips<-lapply(raster.list
+                 ,ClipRasterSave
+                 ,clippingfeatures = ProgramTarp
+                 ,outpath = "InstallationClips/train/Program/"
+                 ,labelvar = "GlblIDF"
+                  )
+
+NoTarpClips<-lapply(raster.list
+                 ,ClipRasterSave
+                 ,clippingfeatures = NoTarp
+                 ,outpath = "InstallationClips/train/@NoTarp/"
+                 ,labelvar = "GlobalID"
+                  )
+
+
+NoTarpClips<-lapply(raster.list
+                 ,ClipRasterSave
+                 ,clippingfeatures = NoTarpUpdate
+                 ,outpath = "InstallationClips/train/Updates/"
+                 ,labelvar = "GlobalID"
+                  )
+
+
+```
+# ML Model
+### Install Karas / Tensor Flow
+
+We'll need to pull in some additional machine learning software and packages with pre-trained NNs
+```{r}
+#install.packages("keras")
+library(keras)
+#reticulate::install_miniconda()
+
+#if issues try a different (older version
+#install_keras(tensorflow = "2.5.0", extra_packages="pillow") #be sure this matched your tensorflow version installed
+#install_tensorflow(version = "2.5.0", extra_packages="pillow")
+
+
+library(reticulate) #python-R Bridge
+
+#be sure anaconda is installed and read/write permissions are open in its directory paths
+#you'll need to install tensorflow
+
+library(tensorflow)
+
+
+
+
+```
+
+### Describe image data
+```{r}
+label_list <- dir("InstallationClips/train/")
+output_n <- length(label_list)
+save(label_list, file= "label_list.R")
+width <- 10
+height<- 10
+target_size <- c(width, height)
+rgb <- 3 #color channels
+
+#assign rescale values and training split
+train_data_gen <- image_data_generator(
+  rescale = 1/255, 
+  validation_split = .3,
+  width_shift_range = 0.1,
+  height_shift_range = 0.1,
+  brightness_range = c(0.9, 1.1),
+  rotation_range=20,
+  #shear_range = .1,
+  #horizontal_flip = TRUE,
+  #vertical_flip = TRUE
+  )
+
+#subset training set
+train_images <- flow_images_from_directory("InstallationClips/train/"
+  ,train_data_gen
+  ,subset = 'training'
+  ,target_size = target_size
+  ,class_mode = "categorical"
+  ,shuffle=F
+  ,classes = label_list
+  ,seed = 42
+  )
+
+#subset validation set
+validation_images <- flow_images_from_directory("InstallationClips/train/"
+ ,train_data_gen
+ ,subset = 'validation'
+ ,target_size = target_size
+ ,class_mode = "categorical"
+ ,shuffle=F
+ ,classes = label_list
+ ,seed = 42
+ )
+
+#verify
+table(train_images$classes)
+
+plot(as.raster(train_images[[1]][[1]][3,,,]))
+```
+
+
+### write model
+This is a very simple net with no convolution (only dense layers) to take advantage of the fact images are only 10*10 pixels.  
+```{r}
+
+# initialise model
+model <- keras_model_sequential()
+
+# add layers
+model %>%
+
+layer_dropout(0.2) %>%
+  # Flatten max filtered output into feature vector 
+  # and feed into dense layer
+  layer_flatten() %>%
+  layer_dense(100) %>%
+  layer_activation("relu") %>%
+  # Outputs from dense layer are projected onto output layer
+  layer_dense(output_n) %>% 
+  layer_activation("softmax")
+
+# compile
+model %>% compile(
+  loss = "categorical_crossentropy",
+  optimizer = optimizer_rmsprop(lr = 0.0001, decay = 1e-6),
+  metrics = "accuracy"
+)
+
+```
+
+#model 2
+```{r}
+
+# Write model perameters
+model_function <- function(
+  learning_rate = 0.001, 
+  dropoutrate=0.20, 
+  n_dense=100){
+  
+  k_clear_session()
+  
+  model <- keras_model_sequential() %>%
+    layer_flatten(input_shape = c(width, height, 3)) %>%
+    layer_dense(units = n_dense, activation = 'relu') %>%
+    layer_dropout(dropoutrate) %>%
+    layer_dense(units=output_n, activation="softmax")
+  
+  model %>% compile(
+    loss = "categorical_crossentropy",
+    optimizer = optimizer_adam(lr = learning_rate),
+    metrics = "accuracy"
+  )
+  
+  return(model)
+  
+}
+
+model <- model_function()
+model
+```
+
+
+### fit model to highest layer (training data)
+```{r}
+#if model not in-memory
+batch_size <- 32
+epochs <- 2000
+
+hist <- model %>% fit_generator(
+  train_images, # our training data from above
+  steps_per_epoch = train_images$n %/% 
+  batch_size, 
+  epochs = epochs, 
+  validation_data = validation_images, # our validation data from above
+  validation_steps = validation_images$n %/% 
+  batch_size,
+  verbose = 2,
+  
+  #callback and checkpoint saves
+  callbacks = list(
+    
+  #stop for condition
+   # callback_early_stopping(monitor = "val_loss", 
+   # mode = "min", 
+   # patience = 50),
+    
+  #avoid overwriting the model file unless val_accuracy has improved.
+    callback_model_checkpoint(
+    filepath = "Checkpoint_model_installation4.h5",
+    monitor = "val_loss",
+    mode = "min",
+    save_best_only = TRUE)
+  )
+   )
+
+model %>% save_model_hdf5("Model_Installation4.h5")
+
+plot(hist)
+
+```
+
+### evaluate holdout test set
+```{r}
+path_test <- "InstallationClips/test/" #set path to the test data
+
+test_data_gen <- image_data_generator(rescale = 1/255) #rescale as before
+
+test_images <- flow_images_from_directory(path_test,
+   test_data_gen,
+   target_size = target_size,
+   class_mode = "categorical",
+   classes = label_list,
+   shuffle = F,
+   seed = 42)
+
+model %>% evaluate(test_images)
+
+```
+
+# Predict full data
+
+###load most recent model weights if not in-memory
+```{r}
+#"best" model
+model <- load_model_hdf5("Checkpoint_model_installation4.h5")
+
+```
+
+### Funtion to loop over footprints/ imagery and predict
+```{r}
+PredictRasterClips <- function(raster,clippingfeatures,labelvar, model=model){
+
+#make projections equal
+clippingfeaturesproj<-st_transform(clippingfeatures, crs(raster))
+
+#crop training plots that overlap image
+CroppedFeatures<-st_crop(clippingfeaturesproj, extent(raster))
+
+#make 3 band
+raster<- dropLayer(raster,4)
+
+#check to make sure features and images overlap. 
+  if (length(CroppedFeatures$geometry) > 0) { #If so run:
+
+#perform extraction and prediction at the row level
+    clip.list<-lapply(1:nrow(CroppedFeatures), function(x){
+
+          #crop imagery to the footprint extents and mask over non-footprint pixel
+            clips<-raster::mask(crop(raster, 
+                                     extent(CroppedFeatures[x,])), 
+                                     CroppedFeatures[x,])
+            
+            scaleF<- function(x){((x - min(raster::minValue(raster))) * 255)/((max(raster::maxValue(raster)))/5) - min(raster::minValue(raster)) + 0}
+            
+          #re scale to maximum value of raster to 255 (e.g. 8 bit)
+          clips <- calc(clips,scaleF)
+         
+#limit max to 255
+clips<- clamp(clips, 0, 255)
+            
+            #save clip as a temporary .tif
+            writeRaster(clips
+                  ,filename ="x.tif"
+                  ,overwrite=TRUE
+                  ,format="GTiff"
+                  ,datatype="INT1U"
+                  #,options="TFW=YES"
+                  )
+            
+#load image
+width <- 10
+height<- 10
+target_size <- c(width, height)
+test_image <- image_load("x.tif", target_size = target_size)
+y <- image_to_array(test_image)
+y <- array_reshape(y, c(1, dim(y)))
+y <- y/255
+
+#Predict image
+pred <- model %>% predict(y)%>%
+         cbind(CroppedFeatures[x,][labelvar])
+  
+  })
+
+#compile list of individual predictions as a data frame by image
+pred<-as.data.frame(do.call(rbind,clip.list))%>%
+                                rename(NoTarpProb = X1,
+                                ProgramProb  = X2) %>%
+  
+                  #make prediction based on membership prob.
+                  mutate(ProgramPred = ifelse(ProgramProb > NoTarpProb, 1,0))
+                  
+                          
+ 
+} else { 
+#if not return nothing (to avoid a problematic error in loops)
+}
+
+  }
+
+```
+
+### Predict image by footprint across multiple rasters
+```{r}
+#make a list of images
+current.list <- list.files(path=paste("PlanetTrainingComposite"), full.names=TRUE, pattern = ".tif")
+
+#read in as a list of raster stacks
+raster.list <- lapply(current.list, raster::stack)
+
+#read in Bay county footprints and match crs
+Footprints<-st_zm(read_sf("Building Data/Programids.shp")) %>%
+                            select(GlobalIDFootprint = GlblIDF)%>%
+                                st_make_valid()
+
+#run loop
+Program_Predicted_10_19<-lapply(raster.list
+                      ,PredictRasterClips
+                      ,clippingfeatures = Footprints 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+
+
+#convert list of data frames to single data frame
+Program_Predicted_10_19 <- as.data.frame(do.call(rbind,Program_Predicted_10_19))
+
+Program_Predicted_10_19 <-left_join(Footprints,Program_Predicted_10_19, by="GlobalIDFootprint")%>%
+                                    filter(!is.na(ProgramProb))
+
+st_write(Program_Predicted_10_19,"Building Data/Program_Predicted_10_19.shp",append=TRUE)
+
+```
+
+### Create Installation index based on prediction week
+```{r}
+Install_Predicted <- cbind (st_read("Building Data/Program_Predicted_10_19.shp")%>%
+                                        mutate(TarpP1 = PrgrmPrd)%>%
+                                        select(GlblIDF,TarpP1),
+                            st_read("Building Data/Program_Predicted_10_31.shp")%>%
+                                        mutate(TarpP2 = PrgrmPrd)%>%
+                                        select(TarpP2),
+                            st_read("Building Data/Program_Predicted_11_16.shp")%>%
+                                        mutate(TarpP3 = PrgrmPrd)%>%
+                                        select(TarpP3),
+                            st_read("Building Data/Program_Predicted_11_21.shp")%>%
+                                        mutate(TarpP4 = PrgrmPrd)%>%
+                                        select(TarpP4),
+                            st_read("Building Data/Program_Predicted_12_4.shp")%>%
+                                        mutate(TarpP5 = PrgrmPrd)%>%
+                                        select(TarpP5),
+                            st_read("Building Data/Program_Predicted_1_10.shp")%>%
+                                        mutate(TarpP6 = PrgrmPrd)%>%
+                                        select(TarpP6)
+                            ) %>%
+                              select(-geometry.1,-geometry.2,-geometry.3,-geometry.4,-geometry.5)
+
+Install_Predicted<-Install_Predicted%>%
+                        mutate(CovrPrd = 
+  ifelse(TarpP1 == "1",  2,
+  ifelse(TarpP1 == "0" & TarpP2 =="1",4,
+  ifelse(TarpP1 == "0" & TarpP2 =="0" & TarpP3 =="1",6,
+  ifelse(TarpP1 == "0" & TarpP2 =="0" & TarpP3 =="0" & TarpP4 =="1",8,                           
+  ifelse(TarpP1 == "0" & TarpP2 =="0" & TarpP3 =="0" & TarpP4 =="0" & TarpP5 =="1",10,                            
+  NA)))))) # note that we are not concerned with P6 since its out of program range. These have all been confirmed program properties in January.
+
+table(Install_Predicted$CovrPrd)
+
+st_write(Install_Predicted, "Building Data/Install_Predicted.shp")
+```
+
+
+
+
