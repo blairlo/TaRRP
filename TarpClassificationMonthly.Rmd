@@ -515,7 +515,7 @@ plot(as.raster(train_images[[1]][[1]][3,,,]))
 This is a very simple net with no convolution (only dense layers) to take advantage of the fact images are only 10*10 pixels.  
 ```{r}
 
-# initialise model
+# initialize model
 model <- keras_model_sequential()
 
 # add layers
