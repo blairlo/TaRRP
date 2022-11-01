@@ -242,8 +242,8 @@ library(tensorflow)
 library(reticulate) #python-R Bridge
 
 #if issues try a different (older version
-install_keras(tensorflow = "2.5.0", extra_packages="pillow") #be sure this matched your tensorflow version installed
-install_tensorflow(version = "2.5.0", extra_packages="pillow")
+#install_keras(tensorflow = "2.5.0", extra_packages="pillow") #be sure this matched your tensorflow version installed
+#install_tensorflow(version = "2.5.0", extra_packages="pillow")
 
 
 
@@ -254,8 +254,8 @@ install_tensorflow(version = "2.5.0", extra_packages="pillow")
 label_list <- dir("MInstallationClips/train/")
 output_n <- length(label_list)
 save(label_list, file= "label_list.R")
-width <- 10
-height<- 10
+width <- 5
+height<- 5
 target_size <- c(width, height)
 rgb <- 3 #color channels
 
@@ -294,50 +294,21 @@ validation_images <- flow_images_from_directory("MInstallationClips/train/"
  ,seed = 42
  )
 
+
 #verify
-table(train_images$classes)
+#table(train_images$classes)
 
-plot(as.raster(train_images[[1]][[1]][3,,,]))
+#plot(as.raster(train_images[[1]][[1]][3,,,]))
 ```
 
-
-### write model
-This is a very simple net with no convolution (only dense layers) to take advantage of the fact images are only 10*10 pixels.  
-```{r}
-
-# initialize model
-model <- keras_model_sequential()
-
-# add layers
-model %>%
-
-layer_dropout(0.2) %>%
-  # Flatten max filtered output into feature vector 
-  # and feed into dense layer
-  layer_flatten() %>%
-  layer_dense(100) %>%
-  layer_activation("relu") %>%
-  # Outputs from dense layer are projected onto output layer
-  layer_dense(output_n) %>% 
-  layer_activation("softmax")
-
-# compile
-model %>% compile(
-  loss = "categorical_crossentropy",
-  optimizer = optimizer_rmsprop(lr = 0.0001, decay = 1e-6),
-  metrics = "accuracy"
-)
-
-```
-
-#model 2
+#model
 ```{r}
 
 # Write model perameters
 model_function <- function(
   learning_rate = 0.001, 
   dropoutrate=0.20, 
-  n_dense=100){
+  n_dense=75){
   
   k_clear_session()
   
@@ -366,7 +337,7 @@ model
 ```{r}
 #if model not in-memory
 batch_size <- 32
-epochs <- 2000
+epochs <- 500
 
 hist <- model %>% fit_generator(
   train_images, # our training data from above
@@ -400,6 +371,9 @@ model %>% save_model_hdf5("Model_Month.h5")
 plot(hist)
 
 ```
+
+
+
 
 ### evaluate holdout test set
 ```{r}
