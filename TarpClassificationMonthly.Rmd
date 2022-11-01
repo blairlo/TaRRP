@@ -47,11 +47,6 @@ options(rasterTmpTime = 1)
 ```
 
 
-# Part 2 Make property level time series
-
-### Mosaic Usable Pixels in Area of Interest
-There are several challenges when using satellite data across a large area-day: multiple tiles or "scenes" make up the study area, missing tiles at the area-day level, and clouds haze and other atmospheric factors make pixels unusable in those that are available. The following steps apply a series of masking, mosaicing, and merging to convert multiple area-day scenes to seamless imagery.
-
 ### Custom Helper Function to Mosaic/Merging
 The following function helps mosaic, merge, and reclassify values of a list of rasters. 
 
@@ -93,19 +88,25 @@ if (Reclass0toNA==TRUE) {
 }
 ```
 
-### Mosaic images by date
-In this particular analysis, there are 5 periods from Oct. 10th (when the Blue Roof Program initiated) to Dec. 5th (When it concluded) in which enough relatively cloud free imagery is available to cover Bay County within a week period. Referenced as "groups" in the code below, multiple days in a given week long period can be used to make up a group.
-
+### Mosaic training images by date
+I Use 2 County wide composites for training--one from January and one in June to capture variability in grass/foliage as well as faded blue coler from wearthering.
 ```{r}
 #Run function on folders containing images by date
 #Groups together represent full coverage of bay county
 
 
-Mimages_10_18<-MosaicReclassRaster("PlanetData/Monthly/10_2018",
+Mimages_01_19<-MosaicReclassRaster("PlanetData/Monthly/01_2019",
                                   Mosaic= "N", 
                                   bands = FALSE, 
                                   Reclass0toNA = TRUE)
-writeRaster(Mimages_10_18,"PlanetData/Monthly/Composite_Mimages_10_18.tif")
+writeRaster(Mimages_01_19,"PlanetData/Monthly/Composite_Mimages_01_19.tif")
+
+Mimages_08_19<-MosaicReclassRaster("PlanetData/Monthly/08_2019",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_08_19,"PlanetData/Monthly/Composite_Mimages_08_19.tif")
+
 
 ```
 
@@ -117,13 +118,14 @@ These are training data derived from high res January imagery in the case of "no
 
 ```{r}
 #read in training plots (program)
-ProgramTarp<-st_zm(read_sf("Building Data/Programids_SA.shp"))
-ProgramTarpUpdate<-st_zm(read_sf("Building Data/NonProgramids_SA.shp"))
+Tarp<-st_zm(read_sf("Building Data/Programids_SA.shp"))
+TarpUpdate1<-st_zm(read_sf("Building Data/NonProgramids_SA.shp"))
+TarpUpdate2<-st_zm(read_sf("Building Data/Programid_SA_June.shp")) #same as January but relevant in June
+TarpUpdate3<-st_zm(read_sf("Building Data/NonProg_SA_June.shp")) #same as January but relevant in June
 
 #read in training plots (roof/other)
-NoTarp<-st_zm(read_sf("Building Data/RoofMaster.shp"))
-NoTarpUpdate<-st_zm(read_sf("Building Data/RoofUpdateX.shp"))
-
+NoTarp<-st_zm(read_sf("Building Data/RoofMaster.shp")) #relevant for Jan and June
+NoTarpUpdate<-st_zm(read_sf("Building Data/RoofUpdateX.shp"))#relevant for Jan and June
 
 ```
 
@@ -149,18 +151,9 @@ if (length(CroppedFeatures$geometry) > 0) { #If so run:
           #crop imagery to the footprint extents and mask over non-footprint pixel
             clips<-raster::mask(crop(raster, 
                                      extent(CroppedFeatures[x,])), 
-                                     CroppedFeatures[x,])) %>%
-                    
-
-            
-#re scale to maximum value of raster to 255 (e.g. 8 bit)
-lapply(calc, fun=function(x){((x - min(raster::minValue(raster))) * 255)/((max(raster::maxValue(raster)))/5) - min(raster::minValue(raster)) + 0})%>%
-         
-#limit max to 255
-lapply(clamp,0, 255)
+                                     CroppedFeatures[x,]))
         
-
-names(clip.list) <- CroppedFeatures[[labelvar]]
+names(clip.list) <- paste0(CroppedFeatures[[labelvar]],"2")#Add additional strings here if you need to make custom names
 
 mapply(writeRaster
        ,clip.list
@@ -181,34 +174,56 @@ mapply(writeRaster
 
 ### Extract image by footprint
 ```{r}
-#make a list of images
-current.list <- list.files(path=paste("PlanetTrainingComposite"), full.names=TRUE, pattern = ".tif")
+#Clip training footprints by Tarp and No tarp. Save in appropriate training folder by type.
 
-#read in as a list of raster stacks
-raster.list <- lapply(current.list, raster::stack)
-
-#ProgramTarpTest<-head(ProgramTarp,10)
-
-#loop function over list
-ProgramClips<-lapply(raster.list
-                 ,ClipRasterSave
-                 ,clippingfeatures = ProgramTarp
-                 ,outpath = "InstallationClips/train/Program/"
+#Tarp Properties and updates
+TarpClips<-ClipRasterSave(Mimages_01_19
+                 ,clippingfeatures = Tarp
+                 ,outpath = "MInstallationClips/train/Tarp/"
                  ,labelvar = "GlblIDF"
                   )
 
-NoTarpClips<-lapply(raster.list
-                 ,ClipRasterSave
+TarpClips<-ClipRasterSave(Mimages_01_19
+                 ,clippingfeatures = TarpUpdate1
+                 ,outpath = "MInstallationClips/train/Tarp/"
+                 ,labelvar = "GlblIDF"
+                  )
+
+TarpClips<-ClipRasterSave(Mimages_08_19
+                 ,clippingfeatures = TarpUpdate2
+                 ,outpath = "MInstallationClips/train/Tarp/"
+                 ,labelvar = "GlblIDF"
+                  )
+
+TarpClips<-ClipRasterSave(Mimages_08_19
+                 ,clippingfeatures = TarpUpdate3
+                 ,outpath = "MInstallationClips/train/Tarp/"
+                 ,labelvar = "GlblIDF"
+                  )
+
+#Bare roof/no tarp footprints
+NoTarpClips<-ClipRasterSave(Mimages_01_19
                  ,clippingfeatures = NoTarp
-                 ,outpath = "InstallationClips/train/@NoTarp/"
+                 ,outpath = "MInstallationClips/train/@NoTarp/"
                  ,labelvar = "GlobalID"
                   )
 
 
-NoTarpClips<-lapply(raster.list
-                 ,ClipRasterSave
+NoTarpClips<-ClipRasterSave(Mimages_01_19
                  ,clippingfeatures = NoTarpUpdate
-                 ,outpath = "InstallationClips/train/Updates/"
+                 ,outpath = "MInstallationClips/train/@NoTarp/"
+                 ,labelvar = "GlobalID"
+                  )
+
+NoTarpClips<-ClipRasterSave(Mimages_08_19
+                 ,clippingfeatures = NoTarpUpdate
+                 ,outpath = "MInstallationClips/train/@NoTarp/"
+                 ,labelvar = "GlobalID"
+                  )
+
+NoTarpClips<-ClipRasterSave(Mimages_08_19
+                 ,clippingfeatures = NoTarpUpdate
+                 ,outpath = "MInstallationClips/train/@NoTarp/"
                  ,labelvar = "GlobalID"
                   )
 
@@ -220,21 +235,15 @@ NoTarpClips<-lapply(raster.list
 We'll need to pull in some additional machine learning software and packages with pre-trained NNs
 ```{r}
 #install.packages("keras")
-library(keras)
+#install_tensorflow()
 #reticulate::install_miniconda()
-
-#if issues try a different (older version
-#install_keras(tensorflow = "2.5.0", extra_packages="pillow") #be sure this matched your tensorflow version installed
-#install_tensorflow(version = "2.5.0", extra_packages="pillow")
-
-
+library(keras)
+library(tensorflow)
 library(reticulate) #python-R Bridge
 
-#be sure anaconda is installed and read/write permissions are open in its directory paths
-#you'll need to install tensorflow
-
-library(tensorflow)
-
+#if issues try a different (older version
+install_keras(tensorflow = "2.5.0", extra_packages="pillow") #be sure this matched your tensorflow version installed
+install_tensorflow(version = "2.5.0", extra_packages="pillow")
 
 
 
@@ -242,7 +251,7 @@ library(tensorflow)
 
 ### Describe image data
 ```{r}
-label_list <- dir("InstallationClips/train/")
+label_list <- dir("MInstallationClips/train/")
 output_n <- length(label_list)
 save(label_list, file= "label_list.R")
 width <- 10
@@ -264,7 +273,7 @@ train_data_gen <- image_data_generator(
   )
 
 #subset training set
-train_images <- flow_images_from_directory("InstallationClips/train/"
+train_images <- flow_images_from_directory("MInstallationClips/train/"
   ,train_data_gen
   ,subset = 'training'
   ,target_size = target_size
@@ -275,7 +284,7 @@ train_images <- flow_images_from_directory("InstallationClips/train/"
   )
 
 #subset validation set
-validation_images <- flow_images_from_directory("InstallationClips/train/"
+validation_images <- flow_images_from_directory("MInstallationClips/train/"
  ,train_data_gen
  ,subset = 'validation'
  ,target_size = target_size
@@ -379,14 +388,14 @@ hist <- model %>% fit_generator(
     
   #avoid overwriting the model file unless val_accuracy has improved.
     callback_model_checkpoint(
-    filepath = "Checkpoint_model_installation4.h5",
+    filepath = "Checkpoint_Model_Month.h5",
     monitor = "val_loss",
     mode = "min",
     save_best_only = TRUE)
   )
    )
 
-model %>% save_model_hdf5("Model_Installation4.h5")
+model %>% save_model_hdf5("Model_Month.h5")
 
 plot(hist)
 
