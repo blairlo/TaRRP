@@ -230,8 +230,9 @@ mapply(writeRaster
 
 ```
 
-
 ### Extract image by footprint
+I extract tarp and no-tarp samples from January and August data to capture variation in tarp weathering as well as grass and trees sharing pixels with roofs. 
+
 ```{r}
 #Clip training footprints by Tarp and No tarp. Save in appropriate training folder by type.
 
@@ -523,6 +524,7 @@ pred <- model %>% predict(y)%>%
 pred<-do.call(rbind,clip.list)%>%
                                 rename(NoTarpProb = X1,
                                        TarpProb  = X2) %>%
+                                            st_drop_geometry()
   
                   #make prediction based on membership prob.
                   mutate(TarpPred = ifelse(TarpProb > NoTarpProb, 1,0))
@@ -545,20 +547,108 @@ Footprints<-st_zm(read_sf("Building Data/BuildingFootprints.shp")) %>%
                             select(GlobalIDFootprint = GlobalID)%>%
                                 st_make_valid()
 
-footprinttest<-head(Footprints)#for prototyping
+footprinttest<-head(Footprints) #for prototyping
 
 #read in raster(s) if not in memory
+Mimages_10_18<-brick("PlanetData/Monthly/Composite_Mimages_10_18.tif")
+Mimages_11_18<-brick("PlanetData/Monthly/Composite_Mimages_11_18.tif")
+Mimages_12_18<-brick("PlanetData/Monthly/Composite_Mimages_12_18.tif")
 Mimages_01_19<-brick("PlanetData/Monthly/Composite_Mimages_01_19.tif")
+Mimages_02_19<-brick("PlanetData/Monthly/Composite_Mimages_02_19.tif")
+Mimages_03_19<-brick("PlanetData/Monthly/Composite_Mimages_03_19.tif")
+Mimages_04_19<-brick("PlanetData/Monthly/Composite_Mimages_04_19.tif")
+Mimages_05_19<-brick("PlanetData/Monthly/Composite_Mimages_05_19.tif")
+Mimages_06_19<-brick("PlanetData/Monthly/Composite_Mimages_06_19.tif")
+Mimages_07_19<-brick("PlanetData/Monthly/Composite_Mimages_07_19.tif")
+Mimages_08_19<-brick("PlanetData/Monthly/Composite_Mimages_08_19.tif")
+Mimages_09_19<-brick("PlanetData/Monthly/Composite_Mimages_09_19.tif")
+
 
 #Predict
-Predicted_Mimages_01_19<-PredictRasterClips(Mimages_01_19
+
+Predicted_Month_10_18<-PredictRasterClips(Mimages_10_18
+                      ,clippingfeatures = footprint
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_10_18,"PlanetData/Monthly/Predicted_Month_10_18.shp")
+
+Predicted_Month_11_18<-PredictRasterClips(Mimages_11_18
+                      ,clippingfeatures = footprint
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_11_18,"PlanetData/Monthly/Predicted_Month_11_18.shp")
+
+Predicted_Month_12_18<-PredictRasterClips(Mimages_12_18
+                      ,clippingfeatures = footprint
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_12_18,"PlanetData/Monthly/Predicted_Month_12_18.shp")
+
+Predicted_Month_01_19<-PredictRasterClips(Mimages_01_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-st_write(Predicted_Mimages_01_19,"Building Data/Predicted_Mimages_01_19.shp")
+write.csv(Predicted_Month_01_19,"PlanetData/Monthly/Predicted_Month_01_19.shp")
 
+Predicted_Month_02_19<-PredictRasterClips(Mimages_02_19
+                      ,clippingfeatures = footprinttest 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_02_19,"PlanetData/Monthly/Predicted_Month_02_19.shp")
 
+Predicted_Month_03_19<-PredictRasterClips(Mimages_03_19
+                      ,clippingfeatures = footprinttest 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_03_19,"PlanetData/Monthly/Predicted_Month_03_19.shp")
+
+Predicted_Month_04_19<-PredictRasterClips(Mimages_04_19
+                      ,clippingfeatures = footprinttest 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_04_19,"PlanetData/Monthly/Predicted_Month_04_19.shp")
+
+Predicted_Month_05_19<-PredictRasterClips(Mimages_05_19
+                      ,clippingfeatures = footprinttest 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_05_19,"PlanetData/Monthly/Predicted_Month_05_19.shp")
+
+Predicted_Month_06_19<-PredictRasterClips(Mimages_06_19
+                      ,clippingfeatures = footprinttest 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_06_19,"PlanetData/Monthly/Predicted_Month_06_19.shp")
+
+Predicted_Month_07_19<-PredictRasterClips(Mimages_07_19
+                      ,clippingfeatures = footprinttest 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_07_19,"PlanetData/Monthly/Predicted_Month_07_19.shp")
+
+Predicted_Month_08_19<-PredictRasterClips(Mimages_08_19
+                      ,clippingfeatures = footprinttest 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_08_19,"PlanetData/Monthly/Predicted_Month_08_19.shp")
+
+Predicted_Month_09_19<-PredictRasterClips(Mimages_09_19
+                      ,clippingfeatures = footprinttest 
+                      ,labelvar = "GlobalIDFootprint"
+                      ,model=model
+                      )
+write.csv(Predicted_Month_09_19,"PlanetData/Monthly/Predicted_Month_09_19.shp")
 
 ```
 
