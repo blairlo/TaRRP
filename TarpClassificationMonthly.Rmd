@@ -565,115 +565,132 @@ Mimages_09_19<-brick("PlanetData/Monthly/Composite_Mimages_09_19.tif")
 
 
 #Predict
-
 Predicted_Month_10_18<-PredictRasterClips(Mimages_10_18
                       ,clippingfeatures = footprint
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_10_18,"PlanetData/Monthly/Predicted_Month_10_18.shp")
+write.csv(Predicted_Month_10_18,"PlanetData/Monthly/Predicted_Month_10_18.csv")
 
 Predicted_Month_11_18<-PredictRasterClips(Mimages_11_18
                       ,clippingfeatures = footprint
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_11_18,"PlanetData/Monthly/Predicted_Month_11_18.shp")
+write.csv(Predicted_Month_11_18,"PlanetData/Monthly/Predicted_Month_11_18.csv")
 
 Predicted_Month_12_18<-PredictRasterClips(Mimages_12_18
                       ,clippingfeatures = footprint
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_12_18,"PlanetData/Monthly/Predicted_Month_12_18.shp")
+write.csv(Predicted_Month_12_18,"PlanetData/Monthly/Predicted_Month_12_18.csv")
 
 Predicted_Month_01_19<-PredictRasterClips(Mimages_01_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_01_19,"PlanetData/Monthly/Predicted_Month_01_19.shp")
+write.csv(Predicted_Month_01_19,"PlanetData/Monthly/Predicted_Month_01_19.csv")
 
 Predicted_Month_02_19<-PredictRasterClips(Mimages_02_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_02_19,"PlanetData/Monthly/Predicted_Month_02_19.shp")
+write.csv(Predicted_Month_02_19,"PlanetData/Monthly/Predicted_Month_02_19.csv")
 
 Predicted_Month_03_19<-PredictRasterClips(Mimages_03_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_03_19,"PlanetData/Monthly/Predicted_Month_03_19.shp")
+write.csv(Predicted_Month_03_19,"PlanetData/Monthly/Predicted_Month_03_19.csv")
 
 Predicted_Month_04_19<-PredictRasterClips(Mimages_04_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_04_19,"PlanetData/Monthly/Predicted_Month_04_19.shp")
+write.csv(Predicted_Month_04_19,"PlanetData/Monthly/Predicted_Month_04_19.csv")
 
 Predicted_Month_05_19<-PredictRasterClips(Mimages_05_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_05_19,"PlanetData/Monthly/Predicted_Month_05_19.shp")
+write.csv(Predicted_Month_05_19,"PlanetData/Monthly/Predicted_Month_05_19.csv")
 
 Predicted_Month_06_19<-PredictRasterClips(Mimages_06_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_06_19,"PlanetData/Monthly/Predicted_Month_06_19.shp")
+write.csv(Predicted_Month_06_19,"PlanetData/Monthly/Predicted_Month_06_19.csv")
 
 Predicted_Month_07_19<-PredictRasterClips(Mimages_07_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_07_19,"PlanetData/Monthly/Predicted_Month_07_19.shp")
+write.csv(Predicted_Month_07_19,"PlanetData/Monthly/Predicted_Month_07_19.csv")
 
 Predicted_Month_08_19<-PredictRasterClips(Mimages_08_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_08_19,"PlanetData/Monthly/Predicted_Month_08_19.shp")
+write.csv(Predicted_Month_08_19,"PlanetData/Monthly/Predicted_Month_08_19.csv")
 
 Predicted_Month_09_19<-PredictRasterClips(Mimages_09_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
-write.csv(Predicted_Month_09_19,"PlanetData/Monthly/Predicted_Month_09_19.shp")
+write.csv(Predicted_Month_09_19,"PlanetData/Monthly/Predicted_Month_09_19.csv")
 
 ```
 
 ### Create Installation index based on prediction week
 ```{r}
-Install_Predicted <- cbind (st_read("Building Data/Program_Predicted_10_19.shp")%>%
-                                        mutate(TarpP1 = PrgrmPrd)%>%
-                                        select(GlblIDF,TarpP1),
-                            st_read("Building Data/Program_Predicted_10_31.shp")%>%
-                                        mutate(TarpP2 = PrgrmPrd)%>%
+Month_Predicted <- cbind (read.csv("PlanetData/Monthly/Predicted_Month_10_18.csv")%>%
+                                        mutate(TarpP1 = TarpPred)%>%
+                                        select(GlobalIDFootprint,TarpP1),
+                            
+                            read.csv("PlanetData/Monthly/Predicted_Month_11_18.csv")%>%
+                                        mutate(TarpP2 = TarpPred)%>%
                                         select(TarpP2),
-                            st_read("Building Data/Program_Predicted_11_16.shp")%>%
-                                        mutate(TarpP3 = PrgrmPrd)%>%
+                            read.csv("PlanetData/Monthly/Predicted_Month_12_18.csv")%>%
+                                        mutate(TarpP3 = TarpPred)%>%
                                         select(TarpP3),
-                            st_read("Building Data/Program_Predicted_11_21.shp")%>%
-                                        mutate(TarpP4 = PrgrmPrd)%>%
+                            read.csv("PlanetData/Monthly/Predicted_Month_01_19.csv")%>%
+                                        mutate(TarpP4 = TarpPred)%>%
                                         select(TarpP4),
-                            st_read("Building Data/Program_Predicted_12_4.shp")%>%
-                                        mutate(TarpP5 = PrgrmPrd)%>%
+                            read.csv("PlanetData/Monthly/Predicted_Month_02_19.csv")%>%
+                                        mutate(TarpP5 = TarpPred)%>%
                                         select(TarpP5),
-                            st_read("Building Data/Program_Predicted_1_10.shp")%>%
-                                        mutate(TarpP6 = PrgrmPrd)%>%
-                                        select(TarpP6)
-                            ) %>%
-                              select(-geometry.1,-geometry.2,-geometry.3,-geometry.4,-geometry.5)
+                           read.csv("PlanetData/Monthly/Predicted_Month_03_19.csv")%>%
+                                        mutate(TarpP6 = TarpPred)%>%
+                                        select(TarpP6),
+                          read.csv("PlanetData/Monthly/Predicted_Month_04_19.csv")%>%
+                                        mutate(TarpP7 = TarpPred)%>%
+                                        select(TarpP7),
+                          read.csv("PlanetData/Monthly/Predicted_Month_05_19.csv")%>%
+                                        mutate(TarpP8 = TarpPred)%>%
+                                        select(TarpP8),
+                          read.csv("PlanetData/Monthly/Predicted_Month_06_19.csv")%>%
+                                        mutate(TarpP9 = TarpPred)%>%
+                                        select(TarpP9),
+                          read.csv("PlanetData/Monthly/Predicted_Month_07_19.csv")%>%
+                                        mutate(TarpP10 = TarpPred)%>%
+                                        select(TarpP10),
+                          read.csv("PlanetData/Monthly/Predicted_Month_08_19.csv")%>%
+                                        mutate(TarpP11 = TarpPred)%>%
+                                        select(TarpP11),
+                           read.csv("PlanetData/Monthly/Predicted_Month_09_19.csv")%>%
+                                        mutate(TarpP12 = TarpPred)%>%
+                                        select(TarpP12))
+                         
 
 Install_Predicted<-Install_Predicted%>%
                         mutate(CovrPrd = 
@@ -683,6 +700,24 @@ Install_Predicted<-Install_Predicted%>%
   ifelse(TarpP1 == "0" & TarpP2 =="0" & TarpP3 =="0" & TarpP4 =="1",8,                           
   ifelse(TarpP1 == "0" & TarpP2 =="0" & TarpP3 =="0" & TarpP4 =="0" & TarpP5 =="1",10,                            
   NA)))))) # note that we are not concerned with P6 since its out of program range. These have all been confirmed program properties in January.
+
+
+Month_Predicted<-Month_Predicted%>%
+                        mutate(MonthRemoved = 
+                                 
+                    ifelse(TarpP1 == "1" & TarpP2 == "0" & TarpP3 == "0",  0,
+                    ifelse(TarpP2 == "1" & TarpP3 == "0" & TarpP4 == "0",  1,       
+                    ifelse(TarpP3 == "1" & TarpP4 == "0" & TarpP5 == "0",  2,  
+                    ifelse(TarpP4 == "1" & TarpP5 == "0" & TarpP6 == "0",  3,
+                    ifelse(TarpP5 == "1" & TarpP6 == "0" & TarpP7 == "0",  4,
+                    ifelse(TarpP6 == "1" & TarpP7 == "0" & TarpP8 == "0",  5,
+                    ifelse(TarpP7 == "1" & TarpP8 == "0" & TarpP9 == "0",  6,
+                    ifelse(TarpP8 == "1" & TarpP9 == "0" & TarpP10 == "0",  7,
+                    ifelse(TarpP9 == "1" & TarpP10 == "0" & TarpP11 == "0",  8,
+                    ifelse(TarpP10 == "1" & TarpP11 == "0" & TarpP12 == "0",  9,
+                    ifelse(TarpP11 == "1" & TarpP12 == "0",  10,
+                    ifelse(TarpP12 == "1", 11)))))))))))))
+
 
 table(Install_Predicted$CovrPrd)
 
