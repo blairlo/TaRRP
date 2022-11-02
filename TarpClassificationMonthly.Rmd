@@ -94,6 +94,23 @@ I Use 2 County wide composites for training--one from January and one in June to
 #Run function on folders containing images by date
 #Groups together represent full coverage of bay county
 
+Mimages_10_18<-MosaicReclassRaster("PlanetData/Monthly/10_2018",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_10_18,"PlanetData/Monthly/Composite_Mimages_10_18.tif")
+
+Mimages_11_18<-MosaicReclassRaster("PlanetData/Monthly/11_2018",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_11_18,"PlanetData/Monthly/Composite_Mimages_11_18.tif")
+
+Mimages_12_18<-MosaicReclassRaster("PlanetData/Monthly/12_2018",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_12_18,"PlanetData/Monthly/Composite_Mimages_12_18.tif")
 
 Mimages_01_19<-MosaicReclassRaster("PlanetData/Monthly/01_2019",
                                   Mosaic= "N", 
@@ -101,11 +118,53 @@ Mimages_01_19<-MosaicReclassRaster("PlanetData/Monthly/01_2019",
                                   Reclass0toNA = TRUE)
 writeRaster(Mimages_01_19,"PlanetData/Monthly/Composite_Mimages_01_19.tif")
 
+Mimages_02_19<-MosaicReclassRaster("PlanetData/Monthly/02_2019",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_02_19,"PlanetData/Monthly/Composite_Mimages_02_19.tif")
+
+Mimages_03_19<-MosaicReclassRaster("PlanetData/Monthly/03_2019",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_03_19,"PlanetData/Monthly/Composite_Mimages_03_19.tif")
+
+Mimages_04_19<-MosaicReclassRaster("PlanetData/Monthly/04_2019",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_04_19,"PlanetData/Monthly/Composite_Mimages_04_19.tif")
+
+Mimages_05_19<-MosaicReclassRaster("PlanetData/Monthly/05_2019",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_05_19,"PlanetData/Monthly/Composite_Mimages_05_19.tif")
+
+Mimages_06_19<-MosaicReclassRaster("PlanetData/Monthly/06_2019",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_06_19,"PlanetData/Monthly/Composite_Mimages_06_19.tif")
+
+Mimages_07_19<-MosaicReclassRaster("PlanetData/Monthly/07_2019",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_07_19,"PlanetData/Monthly/Composite_Mimages_07_19.tif")
+
 Mimages_08_19<-MosaicReclassRaster("PlanetData/Monthly/08_2019",
                                   Mosaic= "N", 
                                   bands = FALSE, 
                                   Reclass0toNA = TRUE)
-writeRaster(Mimages_08_19,"PlanetData/Monthly/Composite_Mimages_08_19.tif")
+writeRaster(Mimages_07_19,"PlanetData/Monthly/Composite_Mimages_08_19.tif")
+
+Mimages_09_19<-MosaicReclassRaster("PlanetData/Monthly/09_2019",
+                                  Mosaic= "N", 
+                                  bands = FALSE, 
+                                  Reclass0toNA = TRUE)
+writeRaster(Mimages_09_19,"PlanetData/Monthly/Composite_Mimages_09_19.tif")
 
 
 ```
@@ -298,7 +357,7 @@ validation_images <- flow_images_from_directory("MInstallationClips/train/"
 #verify
 #table(train_images$classes)
 
-#plot(as.raster(train_images[[1]][[1]][3,,,]))
+plot(as.raster(train_images[[1]][[1]][3]))
 ```
 
 #model
@@ -434,7 +493,7 @@ raster<- dropLayer(raster,4)
             
             #save clip as a temporary .tif
             writeRaster(clips
-                  ,filename ="x.tif"
+                  ,filename ="temp/x.tif"
                   ,overwrite=TRUE
                   ,format="GTiff"
                   ,datatype="INT1U"
@@ -442,22 +501,26 @@ raster<- dropLayer(raster,4)
                   )
             
 #load image
-width <- 5
-height<- 5
-target_size <- c(width, height)
-test_image <- image_load("x.tif", target_size = target_size)
-y <- image_to_array(test_image)
+#width <- 5
+#height<- 5
+#target_size <- c(width, height)
+image <- image_load("temp/x.tif", target_size = target_size)
+y <- image_to_array(image)
 y <- array_reshape(y, c(1, dim(y)))
 y <- y/255
+
+#Different (but slower) rout if you have issues with the manual image load 
+#y <- flow_images_from_directory("temp/",
+                                #test_data_gen,
+                                #target_size = target_size)
 
 #Predict image
 pred <- model %>% predict(y)%>%
          cbind(CroppedFeatures[x,][labelvar])
-  
   })
 
 #compile list of individual predictions as a data frame by image
-pred<-as.data.frame(do.call(rbind,clip.list))%>%
+pred<-do.call(rbind,clip.list)%>%
                                 rename(NoTarpProb = X1,
                                        TarpProb  = X2) %>%
   
@@ -482,26 +545,20 @@ Footprints<-st_zm(read_sf("Building Data/BuildingFootprints.shp")) %>%
                             select(GlobalIDFootprint = GlobalID)%>%
                                 st_make_valid()
 
-footprinttest<-head(Footprints)
+footprinttest<-head(Footprints)#for prototyping
 
 #read in raster(s) if not in memory
-Mimages_01_19<-stack("PlanetData/Monthly/Composite_Mimages_01_19.tif")
+Mimages_01_19<-brick("PlanetData/Monthly/Composite_Mimages_01_19.tif")
 
-#run loop
-Program_Predicted_10_19<-PredictRasterClips(Mimages_01_19
+#Predict
+Predicted_Mimages_01_19<-PredictRasterClips(Mimages_01_19
                       ,clippingfeatures = footprinttest 
                       ,labelvar = "GlobalIDFootprint"
                       ,model=model
                       )
+st_write(Predicted_Mimages_01_19,"Building Data/Predicted_Mimages_01_19.shp")
 
 
-#convert list of data frames to single data frame
-Program_Predicted_10_19 <- as.data.frame(do.call(rbind,Program_Predicted_10_19))
-
-Program_Predicted_10_19 <-left_join(Footprints,Program_Predicted_10_19, by="GlobalIDFootprint")%>%
-                                    filter(!is.na(ProgramProb))
-
-st_write(Program_Predicted_10_19,"Building Data/Program_Predicted_10_19.shp",append=TRUE)
 
 ```
 
